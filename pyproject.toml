@@ -20,6 +20,9 @@ dependencies = [
     "python-dotenv>=1.0",
     "streamlit>=1.40",
     "tenacity>=9.0",
+    "krippendorff>=0.7",
+    "scipy>=1.14",
+    "numpy>=1.26",
 ]
 
 [dependency-groups]
