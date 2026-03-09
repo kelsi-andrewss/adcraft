@@ -1,0 +1,174 @@
+{
+  "gold_ads": [
+    {
+      "id": "gold-001",
+      "label": "great",
+      "primary_text": "What's a 200-point SAT improvement worth? For many families, it's the difference between paying full tuition and earning a merit scholarship that saves $40,000+. Varsity Tutors' SAT program pairs your child with an expert tutor who builds a study plan designed to maximize their score -- and their scholarship potential. Over 80% of our SAT students qualify for merit aid they wouldn't have received otherwise.",
+      "headline": "A Higher SAT Score Could Save You $40,000 in Tuition",
+      "description": "Expert SAT tutoring focused on the scores that unlock merit scholarships. 80% of students qualify for new aid.",
+      "cta_button": "See Your Savings",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 9,
+        "value_prop": 9,
+        "cta_effectiveness": 8,
+        "brand_voice": 8,
+        "emotional_resonance": 8
+      },
+      "human_rationale": "Scores 9 on clarity: 'crystal clear at a glance' -- the financial framing (200-point improvement = $40K savings) gives every sentence a concrete anchor. Scores 9 on value_prop: 'irresistible value prop with multiple proof points' -- combines specific dollar savings, 80% scholarship stat, and expert tutor methodology. CTA scores 8 (Strong): 'connected to a benefit' -- 'See Your Savings' links directly to the financial hook. Brand voice scores 8 (Strong): 'results-focused without being pushy' -- confident financial claims stay warm rather than transactional. Emotional resonance scores 8 (Strong): 'understands and addresses real concerns' -- taps into parent financial anxiety around college costs without manipulation."
+    },
+    {
+      "id": "gold-002",
+      "label": "great",
+      "primary_text": "You know that feeling when a practice test score doesn't budge no matter how many hours you study? It's not that you're not working hard enough -- it's that you're studying the wrong things. Varsity Tutors matches you with a tutor who's been exactly where you are. They'll pinpoint the 3-4 concepts holding your score back and build every session around closing those gaps. No more spinning your wheels.",
+      "headline": "Stop Studying Harder. Start Studying Smarter.",
+      "description": "Your tutor identifies the specific concepts holding you back -- then builds every session around fixing them.",
+      "cta_button": "Get Your Game Plan",
+      "audience": "student",
+      "human_scores": {
+        "clarity": 8,
+        "value_prop": 8,
+        "cta_effectiveness": 8,
+        "brand_voice": 9,
+        "emotional_resonance": 9
+      },
+      "human_rationale": "Scores 8 on clarity (Strong): 'each sentence builds toward the CTA' -- moves from relatable problem (score plateau) to diagnosis (wrong study approach) to solution (tutor-identified gaps). Scores 8 on value_prop (Strong): 'clear differentiation' -- the '3-4 concepts' specificity makes the methodology concrete, though lacks hard outcome numbers. Brand voice scores 9 (Exceptional): 'could only be Varsity Tutors' -- the empathetic opening ('it's not that you're not working hard enough') is distinctly VT's supportive, non-judgmental tone. Emotional resonance scores 9 (Exceptional): 'deeply resonant -- reader feels understood' -- directly validates the student's frustration before offering a solution. CTA scores 8 (Strong): 'action-oriented and connected to a benefit' -- 'Get Your Game Plan' feels sporty and student-appropriate."
+    },
+    {
+      "id": "gold-003",
+      "label": "great",
+      "primary_text": "Last year, 847 Varsity Tutors SAT students were accepted to their top-choice school. Not their safety. Not their backup. Their dream school. Behind each acceptance was a personalized prep plan, an expert tutor who understood their goals, and the confidence that comes from knowing you're truly ready on test day.",
+      "headline": "847 Students Got Into Their Dream School Last Year",
+      "description": "Personalized SAT prep that goes beyond scores. Expert tutoring built around the schools your child wants to attend.",
+      "cta_button": "Book a Free Session",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 9,
+        "value_prop": 8,
+        "cta_effectiveness": 9,
+        "brand_voice": 8,
+        "emotional_resonance": 9
+      },
+      "human_rationale": "Scores 9 on clarity (Exceptional): 'could be understood in a 2-second scroll' -- the 847 number and 'dream school' framing communicate instantly. Scores 8 on value_prop (Strong): 'specific, credible value claims backed by evidence' -- 847 students is concrete social proof, though the methodology description is lighter than the outcome focus. CTA scores 9 (Exceptional): 'feels like the natural next step' -- 'Book a Free Session' combines zero-cost barrier with action, perfectly aligned with the aspirational arc. Brand voice scores 8 (Strong): 'recognizably Varsity Tutors, supportive, knowledgeable' -- the 'not their safety, not their backup' rhythm is warm and personal. Emotional resonance scores 9 (Exceptional): 'taps into core motivations' -- directly addresses the parent's deepest hope (dream school acceptance) with authentic social proof."
+    },
+    {
+      "id": "gold-004",
+      "label": "great",
+      "primary_text": "Between AP classes, practice, and actually having a life, who has 20 hours a week for SAT prep? You don't need more study hours -- you need the right ones. Varsity Tutors' SAT program is built for students who are already busy. Sessions flex around your schedule, focus only on what moves your score, and never waste your time on material you've already mastered.",
+      "headline": "SAT Prep That Fits Your Life, Not the Other Way Around",
+      "description": "Flexible scheduling. Targeted sessions. Zero wasted time on what you already know.",
+      "cta_button": "Build Your Schedule",
+      "audience": "student",
+      "human_scores": {
+        "clarity": 9,
+        "value_prop": 7,
+        "cta_effectiveness": 7,
+        "brand_voice": 8,
+        "emotional_resonance": 8
+      },
+      "human_rationale": "Scores 9 on clarity (Exceptional): 'could be understood in a 2-second scroll' -- the problem-reframe-solution structure is immediately graspable, and each of the three benefits (flexible, targeted, no wasted time) is scannable. Value_prop scores 7 (Strong): 'clear differentiation' with the time-efficiency angle, but lacks hard proof points like score improvements or student counts -- specific but not fully substantiated. CTA scores 7 (Strong): 'clear, action-oriented' -- 'Build Your Schedule' is relevant to the flexibility pitch but slightly generic. Brand voice scores 8 (Strong): 'balances professionalism with warmth' -- 'actually having a life' is relatable student language without crossing into unprofessional territory. Emotional resonance scores 8 (Strong): 'addresses real concerns authentically' -- the overwhelmed-student pain point is genuine and the tone validates rather than dismisses."
+    },
+    {
+      "id": "gold-005",
+      "label": "great",
+      "primary_text": "The tutor makes the difference. That's why Varsity Tutors hand-selects SAT instructors who've scored in the top 1% and have at least 500 hours of tutoring experience. But credentials alone don't cut it -- we match your child with a tutor whose teaching style fits how they learn. Visual learner? Analytical thinker? We've got the right expert for them.",
+      "headline": "Top 1% SAT Tutors, Matched to How Your Child Learns",
+      "description": "Hand-selected instructors with 500+ hours experience. Matched to your child's learning style for faster results.",
+      "cta_button": "Meet Your Tutor",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 8,
+        "value_prop": 9,
+        "cta_effectiveness": 8,
+        "brand_voice": 7,
+        "emotional_resonance": 7
+      },
+      "human_rationale": "Scores 8 on clarity (Strong): 'specific numbers/claims, no wasted words' -- top 1%, 500 hours, learning style matching are all immediately graspable. Scores 9 on value_prop (Exceptional): 'irresistible value prop with multiple proof points' -- combines tutor credentials (top 1%), experience threshold (500 hrs), and unique matching methodology. CTA scores 8 (Strong): 'connected to a benefit' -- 'Meet Your Tutor' personalizes the next step. Brand voice scores 7 (Strong): 'results-focused' and specific to VT's approach, but slightly more transactional than VT's warmest tone -- 'hand-selects' and 'credentials' edge toward corporate. Emotional resonance scores 7 (Strong): 'genuine emotional connection' through the learning-style personalization angle, but the emphasis on tutor credentials is more rational than emotional."
+    },
+    {
+      "id": "gold-006",
+      "label": "mediocre",
+      "primary_text": "Give your child the SAT advantage with Varsity Tutors. Our tutoring program includes practice tests, personalized study materials, and access to experienced instructors who specialize in SAT preparation. Students work through a structured curriculum covering all test sections -- math, reading, and writing -- at their own pace.",
+      "headline": "Comprehensive SAT Prep from Varsity Tutors",
+      "description": "Full SAT curriculum with practice tests, study materials, and expert instructors. All sections covered.",
+      "cta_button": "Learn More",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 6,
+        "value_prop": 5,
+        "cta_effectiveness": 4,
+        "brand_voice": 5,
+        "emotional_resonance": 4
+      },
+      "human_rationale": "Clarity scores 6 (Adequate): 'message is understandable but requires effort' -- the feature list is clear enough but buries the point under a laundry list without hierarchy or emphasis. Value_prop scores 5 (Adequate): 'lists features without benefits' -- practice tests, study materials, and instructors are table stakes for any prep service with no proof points or differentiators. CTA scores 4 (Adequate): 'standard Learn More without supporting context' -- no urgency, no value framing, no reason to click now. Brand voice scores 5 (Adequate): 'generic professional tone, no warmth, no personality' -- reads like any tutoring company's boilerplate. Emotional resonance scores 4 (Adequate): 'surface-level' -- 'give your child the advantage' attempts emotion but is generic and unearned."
+    },
+    {
+      "id": "gold-007",
+      "label": "mediocre",
+      "primary_text": "The SAT doesn't have to be stressful. We get it -- test prep can feel overwhelming, and it's hard to know where to start. That's why Varsity Tutors is here. Our tutors work with students to build confidence and improve scores. Because everyone deserves a chance to shine on test day and show what they're really capable of.",
+      "headline": "SAT Prep That Builds Confidence",
+      "description": "Supportive tutors who help reduce test anxiety and improve your score. You deserve to show your best self.",
+      "cta_button": "Get Started Today",
+      "audience": "student",
+      "human_scores": {
+        "clarity": 5,
+        "value_prop": 4,
+        "cta_effectiveness": 5,
+        "brand_voice": 6,
+        "emotional_resonance": 5
+      },
+      "human_rationale": "Clarity scores 5 (Adequate): 'gets the gist but specific claims are fuzzy' -- the empathy opener is nice but the ad never delivers a concrete promise or specific methodology. Value_prop scores 4 (Adequate): 'vague or unsubstantiated' -- 'build confidence and improve scores' is the claim, but there's zero evidence, no numbers, no methodology detail. CTA scores 5 (Adequate): 'CTA exists and is clear' -- 'Get Started Today' has mild urgency but no value framing or barrier reduction. Brand voice scores 6 (Adequate, high end): the empathetic tone is close to VT's voice but lands slightly cliched -- 'chance to shine' and 'show what they're capable of' are inspirational-poster language rather than authentic VT. Emotional resonance scores 5 (Adequate): 'attempts emotional connection but doesn't land' -- recognizes test anxiety (good) but responds with platitudes rather than a specific solution."
+    },
+    {
+      "id": "gold-008",
+      "label": "mediocre",
+      "primary_text": "Varsity Tutors offers one-on-one SAT preparation designed around your child's needs. Our process begins with an initial assessment, followed by a customized study plan and regular progress check-ins. With flexible scheduling and online or in-person options, we make it easy to fit SAT prep into your family's routine.",
+      "headline": "Personalized SAT Tutoring on Your Schedule",
+      "description": "Initial assessment, custom study plan, and regular check-ins. Online or in-person sessions available.",
+      "cta_button": "Schedule a Session",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 6,
+        "value_prop": 5,
+        "cta_effectiveness": 6,
+        "brand_voice": 6,
+        "emotional_resonance": 4
+      },
+      "human_rationale": "Clarity scores 6 (Adequate): 'understandable but requires effort' -- the process description (assessment, plan, check-ins) is organized but reads like a service brochure rather than an ad. Value_prop scores 5 (Adequate): 'has a value claim but it's vague' -- mentions personalization and flexibility but every competitor claims the same; no proof points or unique methodology. CTA scores 6 (Adequate, high end): 'clear' and specific ('Schedule a Session') but lacks benefit framing or urgency -- it's functional, not compelling. Brand voice scores 6 (Adequate, high end): 'not offensive to the brand but interchangeable with any education company' -- well-structured and professional but could be Kaplan, Princeton Review, or anyone else. Emotional resonance scores 4 (Adequate): 'surface-level' -- makes it 'easy to fit into your routine' is a convenience claim, not an emotional connection with the parent's underlying worry about their child's future."
+    },
+    {
+      "id": "gold-009",
+      "label": "bad",
+      "primary_text": "Want your child to get into an Ivy League school? It all starts with the SAT. Varsity Tutors has been helping students with test prep for years. Our platform connects students with tutors across the country. We also offer prep for ACT, GRE, GMAT, and 300+ other subjects. From elementary math to graduate admissions, we've got you covered.",
+      "headline": "Ivy League Starts Here: SAT Prep and More",
+      "description": "SAT, ACT, GRE, GMAT, and 300+ subjects. Tutoring for every level from K-12 to graduate school.",
+      "cta_button": "Explore Subjects",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 3,
+        "value_prop": 3,
+        "cta_effectiveness": 3,
+        "brand_voice": 4,
+        "emotional_resonance": 3
+      },
+      "human_rationale": "Clarity scores 3 (Poor): 'mixed messages, no clear subject' -- opens with an Ivy League SAT hook, then pivots to ACT, GRE, GMAT, and 300 subjects, completely losing the SAT thread. The reader finishes unsure what this ad is actually selling. Value_prop scores 3 (Poor): 'no differentiator from competitors' -- breadth of subjects actively undermines the SAT expertise claim; being everything to everyone means being nothing to the SAT parent. CTA scores 3 (Poor): 'no value framing' -- 'Explore Subjects' is browsing-oriented and disconnected from the SAT prep promise of the headline. Brand voice scores 4 (Adequate, low end): avoids the worst brand violations (no fear, no jargon) but sounds like a corporate capabilities page rather than a personal, supportive VT ad. Emotional resonance scores 3 (Poor): the Ivy League opener is bait-and-switch -- it creates aspiration then abandons it for a catalog of services, leaving the parent emotionally stranded."
+    },
+    {
+      "id": "gold-010",
+      "label": "bad",
+      "primary_text": "The SAT is a standardized test used by colleges and universities as part of their admissions process. It consists of two main sections: Evidence-Based Reading and Writing, and Math. The test is scored on a scale of 400-1600. Varsity Tutors offers SAT preparation with tutors who understand the test format, scoring methodology, question types, time management strategies, content coverage requirements, and adaptive difficulty patterns. Our tutors help students with reading comprehension, grammar rules, algebra, geometry, trigonometry, data analysis, and passage-based evidence questions. Students can prepare for all sections in a structured program.",
+      "headline": "Complete SAT Preparation Covering Every Section and Skill",
+      "description": "Reading, writing, and math tutoring. All question types, all content areas, all strategies. Full SAT coverage.",
+      "cta_button": "View Programs",
+      "audience": "student",
+      "human_scores": {
+        "clarity": 3,
+        "value_prop": 2,
+        "cta_effectiveness": 2,
+        "brand_voice": 3,
+        "emotional_resonance": 2
+      },
+      "human_rationale": "Clarity scores 3 (Poor): 'confusing structure' -- the wall of text tries to be comprehensive but buries any actionable message under an exhaustive list of test components. A student scanning this gets nothing in 2 seconds. Value_prop scores 2 (Poor): 'no specifics, could be any tutoring company' -- listing every SAT topic (algebra, geometry, trig, data analysis) is describing the test, not the tutoring. Zero results, zero proof, zero differentiation. CTA scores 2 (Poor): 'transactional language, no benefit attached' -- 'View Programs' is catalog-browsing language with no urgency, no value, and no reason to act. Brand voice scores 3 (Poor): 'no personality' -- reads like a course catalog or test prep brochure. No warmth, no encouragement, no trace of VT's supportive partnership tone. Emotional resonance scores 2 (Poor): 'reads like a product spec with no feeling' -- a student facing SAT anxiety gets a taxonomy of math topics instead of empathy, motivation, or a reason to believe this will help them."
+    }
+  ]
+}
