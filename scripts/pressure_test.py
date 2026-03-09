@@ -22,6 +22,7 @@ from src.analytics.cost import get_performance_per_token  # noqa: E402
 from src.db.init_db import init_db  # noqa: E402
 from src.db.queries import get_dimension_averages  # noqa: E402
 from src.evaluate.calibrate import run_calibration  # noqa: E402
+from src.models.calibration import CalibrationResult  # noqa: E402
 from src.output.exporter import (  # noqa: E402
     export_ad_library,
     export_decision_log,
@@ -55,28 +56,28 @@ def print_dimension_breakdown(dim_avgs: dict[str, float]) -> list[str]:
     return weak
 
 
-def stage_calibrate() -> bool:
-    """Run calibration against labeled reference ads."""
+def stage_calibrate() -> CalibrationResult | None:
+    """Run calibration against the gold set and return structured metrics."""
     print_header("STAGE 1: CALIBRATION")
     try:
-        passed = run_calibration()
-        if passed:
+        result = run_calibration()
+        if result.passed:
             print("\n  Calibration: ALL PASSED")
         else:
             print("\n  Calibration: FAILED")
             print("  Suggested fixes:")
-            print("    - Review data/reference_ads/labeled_ads.json for label accuracy")
+            print("    - Review data/reference_ads/calibration_gold_set.json for label accuracy")
             print("    - Adjust dimension weights in src/evaluate/rubrics.py")
             print("    - Check evaluator prompt for scoring drift")
-        return passed
+        return result
     except FileNotFoundError as exc:
         print(f"\n  Calibration ERROR: {exc}")
-        print("  Fix: ensure data/reference_ads/labeled_ads.json exists with labeled ads")
-        return False
+        print("  Fix: ensure data/reference_ads/calibration_gold_set.json exists with gold set ads")
+        return None
     except Exception as exc:
         print(f"\n  Calibration ERROR: {type(exc).__name__}: {exc}")
         print("  Check GEMINI_API_KEY is set and the evaluation engine is functional")
-        return False
+        return None
 
 
 def stage_smoke(db_path: str, rpm: int) -> dict | None:
@@ -130,7 +131,7 @@ def stage_full(db_path: str, rpm: int) -> dict | None:
 
 def stage_report(
     db_path: str,
-    calibration_passed: bool | None,
+    calibration_result: CalibrationResult | None,
     smoke_result: dict | None,
     full_result: dict | None,
 ) -> None:
@@ -139,13 +140,17 @@ def stage_report(
 
     conn = init_db(db_path)
 
-    # Calibration status
-    if calibration_passed is None:
+    # Calibration status and reliability metrics
+    if calibration_result is None:
         print("  Calibration: SKIPPED")
-    elif calibration_passed:
-        print("  Calibration: PASSED")
     else:
-        print("  Calibration: FAILED")
+        status = "PASSED" if calibration_result.passed else "FAILED"
+        print(f"  Calibration: {status}")
+        print(f"    Krippendorff's Alpha: {calibration_result.alpha_overall:.4f}")
+        print(f"    Spearman rho:         {calibration_result.spearman_rho:.4f}")
+        print("    Per-dimension MAE:")
+        for dim, mae in sorted(calibration_result.per_dimension_mae.items()):
+            print(f"      {dim:<25} {mae:.3f}")
 
     # Smoke test summary
     if smoke_result is not None:
@@ -226,7 +231,7 @@ def main() -> None:
     args = parser.parse_args()
 
     start = time.time()
-    calibration_passed: bool | None = None
+    calibration_result: CalibrationResult | None = None
     smoke_result: dict | None = None
     full_result: dict | None = None
 
@@ -234,13 +239,13 @@ def main() -> None:
 
     for stage in stages:
         if stage == "calibrate":
-            calibration_passed = stage_calibrate()
+            calibration_result = stage_calibrate()
         elif stage == "smoke":
             smoke_result = stage_smoke(args.db, args.rpm)
         elif stage == "full":
             full_result = stage_full(args.db, args.rpm)
 
-    stage_report(args.db, calibration_passed, smoke_result, full_result)
+    stage_report(args.db, calibration_result, smoke_result, full_result)
 
     elapsed = time.time() - start
     print(f"\n  Total pressure test time: {elapsed:.1f}s")
