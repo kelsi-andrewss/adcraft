@@ -15,9 +15,10 @@ import os
 
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -37,6 +38,15 @@ from src.models.ad import AdCopy
 from src.models.evaluation import DimensionScore, EvaluationResult
 
 EVALUATOR_MODEL = "gemini-2.5-pro"
+
+# Transient HTTP codes worth retrying — mirrors the SDK's own _RETRY_HTTP_STATUS_CODES
+_RETRIABLE_STATUS_CODES = (408, 429, 500, 502, 503)
+
+
+def _is_retriable(exc: BaseException) -> bool:
+    """Return True for transient API errors that may succeed on retry."""
+    return isinstance(exc, APIError) and exc.code in _RETRIABLE_STATUS_CODES
+
 
 SAFETY_SETTINGS = [
     types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
@@ -201,7 +211,7 @@ class EvaluationEngine:
         return self._call_gemini_with_retry(prompt, schema)
 
     @retry(
-        retry=retry_if_exception_type((Exception,)),
+        retry=retry_if_exception(_is_retriable),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=2, min=2, max=60),
         reraise=True,
@@ -216,21 +226,37 @@ class EvaluationEngine:
                     response_mime_type="application/json",
                     response_json_schema=schema,
                     safety_settings=SAFETY_SETTINGS,
+                    http_options=types.HttpOptions(timeout=180_000),
                 ),
             )
+        except APIError as exc:
+            retriable = _is_retriable(exc)
+            log_decision(
+                "evaluator",
+                "api_retry" if retriable else "api_error",
+                f"Gemini call failed ({exc.code} {exc.status}), "
+                f"{'will retry' if retriable else 'non-retriable'}: {exc}",
+                {
+                    "model": self._model,
+                    "error": str(exc),
+                    "code": exc.code,
+                    "retriable": retriable,
+                },
+            )
+            raise
         except Exception as exc:
             log_decision(
                 "evaluator",
-                "api_retry",
-                f"Gemini call failed, will retry: {type(exc).__name__}: {exc}",
-                {"model": self._model, "error": str(exc)},
+                "api_error",
+                f"Gemini call failed (non-API error, will not retry): {type(exc).__name__}: {exc}",
+                {"model": self._model, "error": str(exc), "retriable": False},
             )
             raise
 
         token_count = 0
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             meta = response.usage_metadata
-            token_count = (getattr(meta, "total_token_count", 0) or 0)
+            token_count = getattr(meta, "total_token_count", 0) or 0
 
         parsed = json.loads(response.text)
         return parsed, token_count
