@@ -329,3 +329,120 @@ def list_quality_snapshots(conn: sqlite3.Connection, *, limit: int = 100) -> lis
             d["dimension_averages"] = json.loads(d["dimension_averages"])
         results.append(d)
     return results
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Intelligence, Analytics & Export query helpers
+# ---------------------------------------------------------------------------
+
+
+def get_competitor_ads(
+    conn: sqlite3.Connection, brand: str | None = None
+) -> list[dict]:
+    """Select competitor ads, optionally filtered by brand."""
+    conn.row_factory = sqlite3.Row
+    if brand is not None:
+        rows = conn.execute(
+            "SELECT * FROM competitor_ads WHERE brand = ? ORDER BY scraped_at DESC",
+            (brand,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM competitor_ads ORDER BY scraped_at DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_quality_snapshots(conn: sqlite3.Connection) -> list[dict]:
+    """Select all quality snapshots ordered by cycle_number ascending."""
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM quality_snapshots ORDER BY cycle_number ASC"
+    ).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        if d.get("dimension_averages") is not None:
+            d["dimension_averages"] = json.loads(d["dimension_averages"])
+        results.append(d)
+    return results
+
+
+def get_ads_with_scores(conn: sqlite3.Connection) -> list[dict]:
+    """Join ads with final-mode evaluations for export.
+
+    Returns denormalized rows: one row per (ad, dimension) pair.
+    Falls back to all evaluations if no final-mode rows exist.
+    """
+    conn.row_factory = sqlite3.Row
+
+    # Try final-mode first
+    rows = conn.execute(
+        """
+        SELECT a.id as ad_id, a.primary_text, a.headline, a.description,
+               a.cta_button, a.model_id, a.cost_usd as ad_cost_usd,
+               e.dimension, e.score, e.rationale, e.eval_mode
+        FROM ads a
+        LEFT JOIN evaluations e ON e.ad_id = a.id AND e.eval_mode = 'final'
+        ORDER BY a.created_at DESC, e.dimension
+        """
+    ).fetchall()
+
+    # If no evaluations joined, try without eval_mode filter
+    has_scores = any(dict(r).get("dimension") is not None for r in rows)
+    if not has_scores:
+        rows = conn.execute(
+            """
+            SELECT a.id as ad_id, a.primary_text, a.headline, a.description,
+                   a.cta_button, a.model_id, a.cost_usd as ad_cost_usd,
+                   e.dimension, e.score, e.rationale, e.eval_mode
+            FROM ads a
+            LEFT JOIN evaluations e ON e.ad_id = a.id
+            ORDER BY a.created_at DESC, e.dimension
+            """
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def get_all_decisions(conn: sqlite3.Connection) -> list[dict]:
+    """Select all decisions ordered by timestamp ascending."""
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM decisions ORDER BY timestamp ASC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_dimension_averages(
+    conn: sqlite3.Connection, cycle_number: int | None = None
+) -> dict[str, float]:
+    """Average score grouped by dimension, optionally filtered by cycle.
+
+    When cycle_number is provided, only evaluations for ads created during
+    that iteration cycle are included (via the iterations table).
+    """
+    conn.row_factory = sqlite3.Row
+
+    if cycle_number is not None:
+        rows = conn.execute(
+            """
+            SELECT e.dimension, AVG(e.score) as avg_score
+            FROM evaluations e
+            JOIN iterations i ON i.target_ad_id = e.ad_id AND i.cycle_number = ?
+            WHERE e.eval_mode = 'final' OR e.eval_mode IS NULL
+            GROUP BY e.dimension
+            """,
+            (cycle_number,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT dimension, AVG(score) as avg_score
+            FROM evaluations
+            WHERE eval_mode = 'final' OR eval_mode IS NULL
+            GROUP BY dimension
+            """
+        ).fetchall()
+
+    return {r["dimension"]: r["avg_score"] for r in rows}

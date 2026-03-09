@@ -20,6 +20,7 @@ from tenacity import (
 )
 
 from src.decisions.logger import log_decision
+from src.intel.analyzer import CompetitorPatterns
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 
@@ -104,8 +105,15 @@ class GenerationEngine:
             {"model": self._model, "temperature": GENERATION_TEMPERATURE},
         )
 
-    def generate(self, brief: AdBrief) -> AdCopy:
-        """Generate ad copy from a brief. Returns a validated AdCopy instance."""
+    def generate(
+        self, brief: AdBrief, competitor_patterns: CompetitorPatterns | None = None
+    ) -> AdCopy:
+        """Generate ad copy from a brief. Returns a validated AdCopy instance.
+
+        When competitor_patterns is provided, a competitive context section is
+        injected into the prompt with top hook patterns, CTA buttons, and
+        emotional angles from competitor analysis.
+        """
         log_decision(
             "generator",
             "generation_start",
@@ -116,8 +124,12 @@ class GenerationEngine:
                 "offer": brief.product_offer,
                 "goal": brief.campaign_goal,
                 "tone": brief.tone,
+                "has_competitor_context": competitor_patterns is not None,
             },
         )
+
+        if competitor_patterns is not None:
+            brief = self._inject_competitor_context(brief, competitor_patterns)
 
         prompt = self._build_prompt(brief)
         raw, token_count = self._call_gemini(prompt)
@@ -147,6 +159,43 @@ class GenerationEngine:
         )
 
         return ad
+
+    def _inject_competitor_context(
+        self, brief: AdBrief, patterns: CompetitorPatterns
+    ) -> AdBrief:
+        """Build competitive context string and attach it to the brief."""
+        lines = ["Competitive Intelligence (use as inspiration, do NOT copy):"]
+
+        if patterns.top_hooks:
+            hook_strs = [f"{hook} ({count} ads)" for hook, count in patterns.top_hooks]
+            lines.append(f"- Top hook patterns in category: {', '.join(hook_strs)}")
+
+        if patterns.top_angles:
+            angle_strs = [f"{angle} ({count} ads)" for angle, count in patterns.top_angles]
+            lines.append(f"- Emotional angles that resonate: {', '.join(angle_strs)}")
+
+        if patterns.cta_buttons:
+            lines.append(f"- Common CTA buttons: {', '.join(patterns.cta_buttons)}")
+
+        if patterns.sample_headlines:
+            lines.append("- Competitor headline examples:")
+            for hl in patterns.sample_headlines:
+                lines.append(f"  * \"{hl}\"")
+
+        competitive_text = "\n".join(lines)
+
+        log_decision(
+            "generator",
+            "competitor_context_injected",
+            f"Injected competitive context: {len(patterns.top_hooks)} hooks, "
+            f"{len(patterns.top_angles)} angles, {len(patterns.cta_buttons)} CTAs",
+            {
+                "top_hooks": [h for h, _ in patterns.top_hooks],
+                "top_angles": [a for a, _ in patterns.top_angles],
+            },
+        )
+
+        return brief.model_copy(update={"competitive_context": competitive_text})
 
     def _build_prompt(self, brief: AdBrief) -> str:
         """Construct the generation prompt from brief details and guidelines."""

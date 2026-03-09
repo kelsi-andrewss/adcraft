@@ -1,0 +1,194 @@
+[
+  {
+    "brand": "Princeton Review",
+    "primary_text": "Average 140-point SAT score increase. Our expert instructors and adaptive technology create a personalized study plan that targets your weak spots. Join 2 million+ students who've trusted us since 1981.",
+    "headline": "Raise Your SAT Score 140+ Points",
+    "cta_button": "Learn More",
+    "hook_type": "statistic_hook",
+    "emotional_angle": "achievement"
+  },
+  {
+    "brand": "Princeton Review",
+    "primary_text": "SAT scores are due in 6 weeks. Is your teen ready? Our proven SAT prep guarantees a higher score or your money back. Don't let test day catch you off guard.",
+    "headline": "SAT Prep With a Score Guarantee",
+    "cta_button": "Get Offer",
+    "hook_type": "urgency",
+    "emotional_angle": "parental_anxiety"
+  },
+  {
+    "brand": "Princeton Review",
+    "primary_text": "98% of Princeton Review SAT students get into one of their top-choice schools. Our tutors don't just teach content -- they teach strategies that top scorers use on every section.",
+    "headline": "98% Get Into a Top-Choice School",
+    "cta_button": "Learn More",
+    "hook_type": "social_proof",
+    "emotional_angle": "competitive_edge"
+  },
+  {
+    "brand": "Princeton Review",
+    "primary_text": "What's keeping your SAT score stuck? Most students hit a plateau because they keep studying the same way. Our diagnostic-first approach finds the gaps standard prep misses.",
+    "headline": "Break Through Your Score Plateau",
+    "cta_button": "Sign Up",
+    "hook_type": "question_hook",
+    "emotional_angle": "student_confidence"
+  },
+  {
+    "brand": "Princeton Review",
+    "primary_text": "Your SAT score follows you everywhere -- college admissions, scholarships, opportunities. 40 years of expertise means we know exactly how to help you maximize every section.",
+    "headline": "40 Years of SAT Expertise",
+    "cta_button": "Learn More",
+    "hook_type": "fear_of_missing_out",
+    "emotional_angle": "achievement"
+  },
+  {
+    "brand": "Princeton Review",
+    "primary_text": "Parents who invest in SAT prep see real ROI: higher scores mean more scholarship dollars. Our students earn an average of $5,000 more in merit aid.",
+    "headline": "$5K More in Scholarship Offers",
+    "cta_button": "Get Offer",
+    "hook_type": "statistic_hook",
+    "emotional_angle": "parental_anxiety"
+  },
+  {
+    "brand": "Princeton Review",
+    "primary_text": "Dream school admission starts with a dream score. Our 1-on-1 tutoring, full-length practice tests, and proprietary analytics give your student every advantage.",
+    "headline": "Every Advantage for Test Day",
+    "cta_button": "Book Now",
+    "hook_type": "aspiration",
+    "emotional_angle": "competitive_edge"
+  },
+  {
+    "brand": "Kaplan",
+    "primary_text": "More students choose Kaplan for SAT prep than any other course. Our live and on-demand options fit any schedule, and our score improvement guarantee means zero risk.",
+    "headline": "America's #1 SAT Prep Course",
+    "cta_button": "Sign Up",
+    "hook_type": "social_proof",
+    "emotional_angle": "convenience"
+  },
+  {
+    "brand": "Kaplan",
+    "primary_text": "The SAT isn't just a test -- it's a gateway. Kaplan's 80+ years of test prep expertise means your student gets strategies backed by decades of data.",
+    "headline": "80+ Years of Proven SAT Strategies",
+    "cta_button": "Learn More",
+    "hook_type": "fear_of_missing_out",
+    "emotional_angle": "competitive_edge"
+  },
+  {
+    "brand": "Kaplan",
+    "primary_text": "Struggling with SAT math? You're not alone. Kaplan's targeted practice channels break down every question type so you know exactly what to expect on test day.",
+    "headline": "Master Every SAT Math Question Type",
+    "cta_button": "Sign Up",
+    "hook_type": "pain_point",
+    "emotional_angle": "student_confidence"
+  },
+  {
+    "brand": "Kaplan",
+    "primary_text": "Why do 4 million students trust Kaplan? Because our adaptive learning technology meets you where you are and takes you where you need to go. Higher score guaranteed.",
+    "headline": "4 Million Students Can't Be Wrong",
+    "cta_button": "Get Offer",
+    "hook_type": "social_proof",
+    "emotional_angle": "achievement"
+  },
+  {
+    "brand": "Kaplan",
+    "primary_text": "SAT registration deadline is approaching. Start prep now and your student will have time to take a practice test, identify weak areas, and build a study plan.",
+    "headline": "Start SAT Prep Before It's Too Late",
+    "cta_button": "Book Now",
+    "hook_type": "urgency",
+    "emotional_angle": "parental_anxiety"
+  },
+  {
+    "brand": "Kaplan",
+    "primary_text": "Live online SAT classes from expert instructors, available 7 days a week. Study on your schedule without sacrificing quality. Prep smarter, not harder.",
+    "headline": "Live SAT Classes, 7 Days a Week",
+    "cta_button": "Sign Up",
+    "hook_type": "aspiration",
+    "emotional_angle": "convenience"
+  },
+  {
+    "brand": "Kaplan",
+    "primary_text": "Every point on the SAT matters. Kaplan students see an average 90-point improvement on their first official test. What could 90 extra points do for your application?",
+    "headline": "Average 90-Point Score Increase",
+    "cta_button": "Learn More",
+    "hook_type": "question_hook",
+    "emotional_angle": "achievement"
+  },
+  {
+    "brand": "Khan Academy",
+    "primary_text": "World-class SAT prep. 100% free. Khan Academy is the official SAT practice partner of the College Board. Personalized practice recommendations powered by real SAT data.",
+    "headline": "Free Official SAT Practice",
+    "cta_button": "Sign Up",
+    "hook_type": "statistic_hook",
+    "emotional_angle": "affordability"
+  },
+  {
+    "brand": "Khan Academy",
+    "primary_text": "Students who complete 20+ hours on Khan Academy SAT prep see an average 115-point score increase. No cost. No catch. Just practice that works.",
+    "headline": "115-Point Avg Increase. Free.",
+    "cta_button": "Sign Up",
+    "hook_type": "social_proof",
+    "emotional_angle": "affordability"
+  },
+  {
+    "brand": "Khan Academy",
+    "primary_text": "Can't afford expensive SAT tutoring? You don't have to. Khan Academy delivers the same caliber practice -- diagnostic quizzes, full practice tests, video explanations -- at zero cost.",
+    "headline": "Premium SAT Prep at Zero Cost",
+    "cta_button": "Sign Up",
+    "hook_type": "pain_point",
+    "emotional_angle": "affordability"
+  },
+  {
+    "brand": "Khan Academy",
+    "primary_text": "Your SAT score shouldn't depend on your zip code. Khan Academy levels the playing field with free, personalized SAT prep available to every student, everywhere.",
+    "headline": "SAT Prep for Every Student",
+    "cta_button": "Learn More",
+    "hook_type": "aspiration",
+    "emotional_angle": "student_confidence"
+  },
+  {
+    "brand": "Khan Academy",
+    "primary_text": "Wondering where to start with SAT prep? Take our free diagnostic quiz and get a personalized study plan in minutes. Practice on your phone, tablet, or computer.",
+    "headline": "Your Free SAT Study Plan Awaits",
+    "cta_button": "Sign Up",
+    "hook_type": "question_hook",
+    "emotional_angle": "convenience"
+  },
+  {
+    "brand": "Chegg",
+    "primary_text": "SAT prep that fits in your pocket. Chegg's mobile-first practice tests and video walkthroughs help you study anywhere, anytime. Subscribe for less than your daily coffee.",
+    "headline": "SAT Prep for Less Than Coffee",
+    "cta_button": "Get Offer",
+    "hook_type": "aspiration",
+    "emotional_angle": "affordability"
+  },
+  {
+    "brand": "Chegg",
+    "primary_text": "Still using outdated SAT prep books? Chegg's adaptive practice uses AI to focus on the questions you actually need to work on. Stop wasting time on what you already know.",
+    "headline": "Smarter SAT Prep With AI",
+    "cta_button": "Sign Up",
+    "hook_type": "question_hook",
+    "emotional_angle": "convenience"
+  },
+  {
+    "brand": "Chegg",
+    "primary_text": "Join 3 million+ students already using Chegg for homework help and test prep. Our SAT practice module includes 1,500+ questions with step-by-step solutions.",
+    "headline": "1,500+ SAT Practice Questions",
+    "cta_button": "Get Offer",
+    "hook_type": "social_proof",
+    "emotional_angle": "student_confidence"
+  },
+  {
+    "brand": "Chegg",
+    "primary_text": "Every SAT practice session on Chegg shows you exactly what you got wrong and why. No more guessing about your weak spots. Data-driven prep that actually works.",
+    "headline": "Know Exactly Where You Stand",
+    "cta_button": "Sign Up",
+    "hook_type": "pain_point",
+    "emotional_angle": "student_confidence"
+  },
+  {
+    "brand": "Chegg",
+    "primary_text": "Parents: give your teen the tools to succeed without the $2,000 tutor bill. Chegg SAT prep starts at $14.95/month with instant access to expert-created content.",
+    "headline": "Expert SAT Prep From $14.95/mo",
+    "cta_button": "Get Offer",
+    "hook_type": "statistic_hook",
+    "emotional_angle": "parental_anxiety"
+  }
+]
