@@ -1,0 +1,174 @@
+{
+  "reference_ads": [
+    {
+      "id": "ref-great-001",
+      "label": "great",
+      "primary_text": "Your child's SAT score shouldn't be limited by access to great teaching. Varsity Tutors connects students with expert SAT tutors who've helped families like yours see an average 160-point score improvement. Our personalized 1-on-1 approach means your student gets a study plan built around their specific strengths and weaknesses -- not a one-size-fits-all program.",
+      "headline": "Average 160-Point SAT Score Improvement",
+      "description": "Personalized 1-on-1 SAT tutoring from expert instructors. Join 3,000+ families who've seen real results.",
+      "cta_button": "Get Started",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 9,
+        "value_prop": 9,
+        "cta_effectiveness": 8,
+        "brand_voice": 8,
+        "emotional_resonance": 8
+      },
+      "human_rationale": "Clear benefit statement with specific 160-point claim. Strong value prop anchored in personalization and expert tutors. CTA is direct. Authentic Varsity Tutors voice -- supportive, results-oriented, not fear-based. Emotional hook around access and fairness resonates with parents."
+    },
+    {
+      "id": "ref-great-002",
+      "label": "great",
+      "primary_text": "The SAT is 3 months away. Is your student ready? Our expert tutors have helped over 3,000 students boost their scores by an average of 160 points. We start with a diagnostic assessment to find exactly where your child needs help -- then build a custom study plan that targets those gaps. No wasted time on material they already know.",
+      "headline": "Custom SAT Prep That Targets Weak Spots",
+      "description": "Diagnostic-first approach identifies gaps. Expert 1-on-1 tutoring fills them. See results in weeks, not months.",
+      "cta_button": "Book a Free Consultation",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 8,
+        "value_prop": 9,
+        "cta_effectiveness": 9,
+        "brand_voice": 8,
+        "emotional_resonance": 7
+      },
+      "human_rationale": "Urgency opener is effective without being manipulative. Diagnostic-first approach differentiates from generic prep. CTA lowers barrier with 'free consultation'. Brand voice is knowledgeable and helpful. Emotional resonance is solid but slightly less personal than ref-great-001."
+    },
+    {
+      "id": "ref-great-003",
+      "label": "great",
+      "primary_text": "You've put in the work. You've taken the practice tests. But are you scoring where you want to be? Varsity Tutors matches you with an SAT expert who's scored in the 99th percentile and knows exactly how to help you break through your score ceiling. Real tutors, real strategies, real results.",
+      "headline": "Break Through Your SAT Score Ceiling",
+      "description": "Work with 99th-percentile SAT tutors who know every trick in the book. Personalized strategies for your target score.",
+      "cta_button": "Find Your Tutor",
+      "audience": "student",
+      "human_scores": {
+        "clarity": 8,
+        "value_prop": 8,
+        "cta_effectiveness": 8,
+        "brand_voice": 9,
+        "emotional_resonance": 8
+      },
+      "human_rationale": "Student-direct voice is authentic and motivating. 'Score ceiling' concept is specific and relatable. 99th-percentile tutor claim builds credibility. CTA is action-oriented. Brand voice nails the encouraging-peer tone that works for students."
+    },
+    {
+      "id": "ref-great-004",
+      "label": "great",
+      "primary_text": "Why do 94% of Varsity Tutors SAT students recommend us? Because we don't believe in cookie-cutter prep. Every session is 1-on-1 with an expert tutor who adapts to how your child learns. Math anxiety? We address it. Reading comprehension gaps? We target them. Your child gets a tutor who actually understands where they're stuck.",
+      "headline": "94% of SAT Students Recommend Varsity Tutors",
+      "description": "Adaptive 1-on-1 tutoring that meets your child where they are. Expert instructors. Proven results.",
+      "cta_button": "Learn More",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 8,
+        "value_prop": 8,
+        "cta_effectiveness": 7,
+        "brand_voice": 9,
+        "emotional_resonance": 8
+      },
+      "human_rationale": "Social proof (94%) is compelling. Addresses specific pain points parents recognize (math anxiety, reading gaps). Brand voice is warm and knowledgeable. CTA is standard but effective. Clarity is strong -- each sentence builds on the last."
+    },
+    {
+      "id": "ref-great-005",
+      "label": "great",
+      "primary_text": "Your SAT score opens doors -- to your dream school, to scholarships, to opportunities. Don't leave it to chance. Varsity Tutors pairs you with an expert who builds a study plan around YOUR goals. Whether you're aiming for 1400+ or trying to crack 1200, we meet you where you are and get you where you want to be.",
+      "headline": "Your SAT Score Opens Doors. We Help You Walk Through Them.",
+      "description": "Goal-based SAT prep with expert tutors. From score targets to study plans, everything is built around you.",
+      "cta_button": "Start Your Journey",
+      "audience": "student",
+      "human_scores": {
+        "clarity": 8,
+        "value_prop": 8,
+        "cta_effectiveness": 7,
+        "brand_voice": 8,
+        "emotional_resonance": 9
+      },
+      "human_rationale": "Strong emotional opening about doors and opportunities. Inclusive range (1400+ to 1200) makes it feel accessible. Goal-based framing is motivating. Brand voice balances aspiration with support. CTA 'Start Your Journey' fits the aspirational tone."
+    },
+    {
+      "id": "ref-bad-001",
+      "label": "bad",
+      "primary_text": "Looking for SAT help? We offer tutoring services for students preparing for the SAT exam. Our tutors are experienced and ready to help your child succeed. Sign up today to get started with our program.",
+      "headline": "SAT Tutoring Available Now",
+      "description": "Professional tutoring services for SAT preparation. Sign up today.",
+      "cta_button": "Sign Up",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 4,
+        "value_prop": 2,
+        "cta_effectiveness": 3,
+        "brand_voice": 3,
+        "emotional_resonance": 2
+      },
+      "human_rationale": "Completely generic -- could be any tutoring company. No specific claims, no differentiators, no results data. 'Experienced' is meaningless without evidence. No emotional connection. CTA 'Sign Up' is transactional without value framing. Reads like a template, not a brand."
+    },
+    {
+      "id": "ref-bad-002",
+      "label": "bad",
+      "primary_text": "DON'T LET YOUR CHILD FAIL THE SAT! The SAT is the most important test of their life and a bad score could ruin their future. Our tutors guarantee score improvements or your money back. Act NOW before spots fill up!",
+      "headline": "DON'T FAIL THE SAT!",
+      "description": "Guaranteed score improvement! Limited spots available. Act now or miss out!",
+      "cta_button": "Act Now",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 3,
+        "value_prop": 3,
+        "cta_effectiveness": 4,
+        "brand_voice": 2,
+        "emotional_resonance": 3
+      },
+      "human_rationale": "Fear-based manipulation that contradicts Varsity Tutors' supportive brand voice. ALL CAPS screams desperation. 'Ruin their future' is hyperbolic and anxiety-inducing. False urgency ('spots fill up') damages trust. Guarantee claim is unsubstantiated. This would actively harm brand perception."
+    },
+    {
+      "id": "ref-bad-003",
+      "label": "bad",
+      "primary_text": "Varsity Tutors leverages proprietary adaptive learning technology and a curated network of credentialed educators to deliver optimized SAT preparation outcomes. Our pedagogical methodology synthesizes evidence-based instructional strategies with real-time performance analytics to maximize score trajectory.",
+      "headline": "Optimized SAT Preparation Solutions",
+      "description": "Evidence-based instructional methodology. Adaptive learning technology. Credentialed educators.",
+      "cta_button": "Learn More",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 2,
+        "value_prop": 3,
+        "cta_effectiveness": 3,
+        "brand_voice": 2,
+        "emotional_resonance": 2
+      },
+      "human_rationale": "Jargon-laden corporate speak that no parent would connect with. 'Pedagogical methodology' and 'score trajectory' are alienating. Zero emotional warmth. Hides a decent value prop behind impenetrable language. Reads like an internal deck, not an ad. Completely off-brand for Varsity Tutors' approachable voice."
+    },
+    {
+      "id": "ref-bad-004",
+      "label": "bad",
+      "primary_text": "hey want better SAT scores? our tutors are pretty good at helping with that lol. we've been doing this for a while and students seem to like it. hit us up if you're interested or whatever.",
+      "headline": "SAT Help If You Want It",
+      "description": "We do SAT tutoring. It's pretty good. Check it out maybe.",
+      "cta_button": "Check It Out",
+      "audience": "student",
+      "human_scores": {
+        "clarity": 3,
+        "value_prop": 2,
+        "cta_effectiveness": 2,
+        "brand_voice": 2,
+        "emotional_resonance": 3
+      },
+      "human_rationale": "Overly casual to the point of being unprofessional. 'lol' and 'or whatever' undermine credibility. No specific claims or value. Hedging language ('pretty good', 'seem to like it') signals zero confidence. While the casual tone attempts to connect with students, it overshoots into negligence."
+    },
+    {
+      "id": "ref-bad-005",
+      "label": "bad",
+      "primary_text": "Every year thousands of students take the SAT. The SAT was created by the College Board and is used by colleges for admissions decisions. A good SAT score can help with college applications. Varsity Tutors offers SAT tutoring for students who want to prepare for the test.",
+      "headline": "Prepare for the SAT with Varsity Tutors",
+      "description": "SAT tutoring services for college-bound students. We help with test preparation.",
+      "cta_button": "Learn More",
+      "audience": "parent",
+      "human_scores": {
+        "clarity": 4,
+        "value_prop": 2,
+        "cta_effectiveness": 3,
+        "brand_voice": 3,
+        "emotional_resonance": 2
+      },
+      "human_rationale": "Wastes space explaining what the SAT is -- the audience already knows. No unique value proposition. States obvious facts instead of making a case. No differentiation from any other tutoring service. Emotionally flat, reads like a Wikipedia stub. Brand voice is absent -- could be literally any company."
+    }
+  ]
+}

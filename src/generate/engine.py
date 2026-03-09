@@ -1,0 +1,222 @@
+"""Ad copy generation engine for AdCraft.
+
+Uses Gemini 2.5 Flash with structured JSON output to generate ad copy
+from an AdBrief. Includes brand voice guidelines, few-shot examples,
+platform constraints, and retry logic for safety filter blocks.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+
+from google import genai
+from google.genai import types
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from src.decisions.logger import log_decision
+from src.models.ad import AdCopy
+from src.models.brief import AdBrief
+
+GENERATOR_MODEL = "gemini-2.5-flash"
+GENERATION_TEMPERATURE = 0.7
+
+SAFETY_SETTINGS = [
+    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
+    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_ONLY_HIGH"),
+    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_ONLY_HIGH"),
+    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_ONLY_HIGH"),
+]
+
+# Schema for structured output — matches AdCopy fields
+GENERATION_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "primary_text": {
+            "type": "string",
+            "description": "Main ad body text (max 125 chars visible, up to 500 total)",
+        },
+        "headline": {
+            "type": "string",
+            "description": "Ad headline (max 40 characters)",
+        },
+        "description": {
+            "type": "string",
+            "description": "Ad description/link description (max 125 characters)",
+        },
+        "cta_button": {
+            "type": "string",
+            "description": "CTA button text. Must be one of: Learn More, Get Started, Sign Up, Book Now, Contact Us, Get Offer, Apply Now",
+        },
+    },
+    "required": ["primary_text", "headline", "description", "cta_button"],
+}
+
+BRAND_VOICE_GUIDELINES = """VARSITY TUTORS BRAND VOICE:
+- Supportive and encouraging — we're a partner in the student's journey
+- Knowledgeable and confident — we have the expertise and results to prove it
+- Warm but professional — approachable without being unprofessional
+- Results-oriented — specific numbers and proof points, not vague claims
+- Never fear-based — no "DON'T FAIL", no anxiety manipulation, no false urgency
+- Authentic — real language that parents and students relate to, no corporate jargon"""
+
+FEW_SHOT_EXAMPLES = """EXAMPLE 1 (Parent-focused, strong):
+Primary text: "Your child's SAT score shouldn't be limited by access to great teaching. Varsity Tutors connects students with expert SAT tutors who've helped families like yours see an average 160-point score improvement. Our personalized 1-on-1 approach means your student gets a study plan built around their specific strengths and weaknesses -- not a one-size-fits-all program."
+Headline: "Average 160-Point SAT Score Improvement"
+Description: "Personalized 1-on-1 SAT tutoring from expert instructors. Join 3,000+ families who've seen real results."
+CTA: "Get Started"
+
+EXAMPLE 2 (Student-focused, strong):
+Primary text: "You've put in the work. You've taken the practice tests. But are you scoring where you want to be? Varsity Tutors matches you with an SAT expert who's scored in the 99th percentile and knows exactly how to help you break through your score ceiling. Real tutors, real strategies, real results."
+Headline: "Break Through Your SAT Score Ceiling"
+Description: "Work with 99th-percentile SAT tutors who know every trick in the book. Personalized strategies for your target score."
+CTA: "Find Your Tutor"
+"""
+
+PLATFORM_CONSTRAINTS = """FACEBOOK/INSTAGRAM AD CONSTRAINTS:
+- Primary text: 125 characters visible in feed (up to 500 total, remainder behind "See More")
+- Headline: max 40 characters for full display
+- Description: max 125 characters
+- CTA button: must be one of: Learn More, Get Started, Sign Up, Book Now, Contact Us, Get Offer, Apply Now
+- Write for mobile-first — short paragraphs, scannable, punchy"""
+
+
+class GenerationEngine:
+    """Generates ad copy using Gemini 2.5 Flash with structured output."""
+
+    def __init__(self, client: genai.Client | None = None) -> None:
+        if client is not None:
+            self._client = client
+        else:
+            api_key = os.environ.get("GEMINI_API_KEY", "")
+            self._client = genai.Client(api_key=api_key)
+        self._model = GENERATOR_MODEL
+
+        log_decision(
+            "generator",
+            "engine_init",
+            f"GenerationEngine initialized: model={self._model}, temp={GENERATION_TEMPERATURE}",
+            {"model": self._model, "temperature": GENERATION_TEMPERATURE},
+        )
+
+    def generate(self, brief: AdBrief) -> AdCopy:
+        """Generate ad copy from a brief. Returns a validated AdCopy instance."""
+        log_decision(
+            "generator",
+            "generation_start",
+            f"Generating ad for audience='{brief.audience_segment}', "
+            f"offer='{brief.product_offer}', goal='{brief.campaign_goal}'",
+            {
+                "audience": brief.audience_segment,
+                "offer": brief.product_offer,
+                "goal": brief.campaign_goal,
+                "tone": brief.tone,
+            },
+        )
+
+        prompt = self._build_prompt(brief)
+        raw, token_count = self._call_gemini(prompt)
+
+        ad = AdCopy(
+            primary_text=raw["primary_text"],
+            headline=raw["headline"],
+            description=raw["description"],
+            cta_button=raw["cta_button"],
+            model_id=self._model,
+            generation_config={
+                "temperature": GENERATION_TEMPERATURE,
+                "safety_settings": "BLOCK_ONLY_HIGH",
+            },
+            token_count=token_count,
+        )
+
+        log_decision(
+            "generator",
+            "generation_complete",
+            f"Generated ad: headline='{ad.headline[:50]}', tokens={token_count}",
+            {
+                "headline": ad.headline,
+                "primary_text_len": len(ad.primary_text),
+                "token_count": token_count,
+            },
+        )
+
+        return ad
+
+    def _build_prompt(self, brief: AdBrief) -> str:
+        """Construct the generation prompt from brief details and guidelines."""
+        competitive_section = ""
+        if brief.competitive_context:
+            competitive_section = f"\nCOMPETITIVE CONTEXT:\n{brief.competitive_context}\n"
+
+        return f"""You are an expert advertising copywriter for Varsity Tutors, creating a Facebook/Instagram ad for SAT test prep.
+
+{BRAND_VOICE_GUIDELINES}
+
+{PLATFORM_CONSTRAINTS}
+
+{FEW_SHOT_EXAMPLES}
+
+AD BRIEF:
+- Target audience: {brief.audience_segment}
+- Product/offer: {brief.product_offer}
+- Campaign goal: {brief.campaign_goal}
+- Tone: {brief.tone}
+{competitive_section}
+INSTRUCTIONS:
+1. Write a compelling ad that speaks directly to the target audience.
+2. Include specific, credible claims (score improvements, student counts, tutor qualifications).
+3. Make every word count — mobile users scroll fast.
+4. The CTA should feel like a natural next step, not a hard sell.
+5. Stay on-brand: supportive, knowledgeable, warm, results-oriented.
+6. Do NOT use fear-based messaging, ALL CAPS, or false urgency.
+
+Generate the ad copy now."""
+
+    def _call_gemini(self, prompt: str) -> tuple[dict, int]:
+        """Call Gemini with structured output and retry logic.
+
+        Returns (parsed_response_dict, total_token_count).
+        """
+        return self._call_gemini_with_retry(prompt)
+
+    @retry(
+        retry=retry_if_exception_type((Exception,)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=60),
+        reraise=True,
+    )
+    def _call_gemini_with_retry(self, prompt: str) -> tuple[dict, int]:
+        """Inner call with tenacity retry decorator."""
+        try:
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=GENERATION_SCHEMA,
+                    temperature=GENERATION_TEMPERATURE,
+                    safety_settings=SAFETY_SETTINGS,
+                ),
+            )
+        except Exception as exc:
+            log_decision(
+                "generator",
+                "api_retry",
+                f"Gemini call failed, will retry: {type(exc).__name__}: {exc}",
+                {"model": self._model, "error": str(exc)},
+            )
+            raise
+
+        token_count = 0
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            meta = response.usage_metadata
+            token_count = (getattr(meta, "total_token_count", 0) or 0)
+
+        parsed = json.loads(response.text)
+        return parsed, token_count
