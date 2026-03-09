@@ -1,7 +1,11 @@
-# Environment
+# Environment (secrets)
 .env
-.env.*
+.env.local
+.env.production
 *.rtf
+
+# But keep the template
+!.env.example
 
 # Python
 __pycache__/
