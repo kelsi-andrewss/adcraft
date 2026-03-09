@@ -71,9 +71,7 @@ def get_ad(conn: sqlite3.Connection, ad_id: str) -> dict | None:
 def list_ads(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict]:
     """List ads ordered by creation time descending."""
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM ads ORDER BY created_at DESC LIMIT ?", (limit,)
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM ads ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -336,9 +334,7 @@ def list_quality_snapshots(conn: sqlite3.Connection, *, limit: int = 100) -> lis
 # ---------------------------------------------------------------------------
 
 
-def get_competitor_ads(
-    conn: sqlite3.Connection, brand: str | None = None
-) -> list[dict]:
+def get_competitor_ads(conn: sqlite3.Connection, brand: str | None = None) -> list[dict]:
     """Select competitor ads, optionally filtered by brand."""
     conn.row_factory = sqlite3.Row
     if brand is not None:
@@ -347,18 +343,14 @@ def get_competitor_ads(
             (brand,),
         ).fetchall()
     else:
-        rows = conn.execute(
-            "SELECT * FROM competitor_ads ORDER BY scraped_at DESC"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM competitor_ads ORDER BY scraped_at DESC").fetchall()
     return [dict(r) for r in rows]
 
 
 def get_quality_snapshots(conn: sqlite3.Connection) -> list[dict]:
     """Select all quality snapshots ordered by cycle_number ascending."""
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM quality_snapshots ORDER BY cycle_number ASC"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM quality_snapshots ORDER BY cycle_number ASC").fetchall()
     results = []
     for r in rows:
         d = dict(r)
@@ -408,9 +400,7 @@ def get_ads_with_scores(conn: sqlite3.Connection) -> list[dict]:
 def get_all_decisions(conn: sqlite3.Connection) -> list[dict]:
     """Select all decisions ordered by timestamp ascending."""
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM decisions ORDER BY timestamp ASC"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM decisions ORDER BY timestamp ASC").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -446,3 +436,64 @@ def get_dimension_averages(
         ).fetchall()
 
     return {r["dimension"]: r["avg_score"] for r in rows}
+
+
+# ---------------------------------------------------------------------------
+# calibration_runs
+# ---------------------------------------------------------------------------
+
+
+def insert_calibration_run(
+    conn: sqlite3.Connection,
+    *,
+    model_version: str,
+    alpha_overall: float,
+    spearman_rho: float,
+    mae_per_dimension: dict[str, float],
+    ad_count: int,
+    passed: bool,
+    details: dict | None = None,
+) -> str:
+    """Insert a calibration run and return its generated ID."""
+    run_id = str(uuid.uuid4())
+    details_json = json.dumps(details) if details is not None else None
+    conn.execute(
+        """INSERT INTO calibration_runs
+           (id, model_version, alpha_overall, spearman_rho,
+            mae_clarity, mae_value_prop, mae_cta_effectiveness,
+            mae_brand_voice, mae_emotional_resonance,
+            ad_count, passed, details_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            run_id,
+            model_version,
+            alpha_overall,
+            spearman_rho,
+            mae_per_dimension.get("clarity"),
+            mae_per_dimension.get("value_prop"),
+            mae_per_dimension.get("cta_effectiveness"),
+            mae_per_dimension.get("brand_voice"),
+            mae_per_dimension.get("emotional_resonance"),
+            ad_count,
+            int(passed),
+            details_json,
+        ),
+    )
+    conn.commit()
+    return run_id
+
+
+def list_calibration_runs(conn: sqlite3.Connection, *, limit: int = 20) -> list[dict]:
+    """List calibration runs ordered by timestamp descending."""
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM calibration_runs ORDER BY timestamp DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        if d.get("details_json") is not None:
+            d["details_json"] = json.loads(d["details_json"])
+        results.append(d)
+    return results
