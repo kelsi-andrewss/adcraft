@@ -27,9 +27,7 @@ class InterventionPlan:
 
 # Dimension-specific intervention strategies keyed by actual dimension names
 INTERVENTION_STRATEGIES: dict[str, str] = {
-    "clarity": (
-        "Simplify sentence structure. Remove jargon. One idea per sentence."
-    ),
+    "clarity": ("Simplify sentence structure. Remove jargon. One idea per sentence."),
     "value_prop": (
         "Sharpen the specific benefit. What does the student/parent get "
         "that competitors don't offer?"
@@ -176,16 +174,10 @@ class SelfHealer:
         plan = self.select_intervention(weakest)
 
         scores_summary = "\n".join(
-            f"  - {s.dimension}: {s.score:.1f} — "
-            f"{s.rationale[:120]}"
-            for s in evaluation.scores
+            f"  - {s.dimension}: {s.score:.1f} — {s.rationale[:120]}" for s in evaluation.scores
         )
 
-        weak_score = next(
-            s.score
-            for s in evaluation.scores
-            if s.dimension == weakest
-        )
+        weak_score = next(s.score for s in evaluation.scores if s.dimension == weakest)
 
         prompt = (
             "ITERATION FEEDBACK — Fix the weakest dimension "

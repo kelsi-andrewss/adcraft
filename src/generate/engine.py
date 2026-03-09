@@ -160,9 +160,7 @@ class GenerationEngine:
 
         return ad
 
-    def _inject_competitor_context(
-        self, brief: AdBrief, patterns: CompetitorPatterns
-    ) -> AdBrief:
+    def _inject_competitor_context(self, brief: AdBrief, patterns: CompetitorPatterns) -> AdBrief:
         """Build competitive context string and attach it to the brief."""
         lines = ["Competitive Intelligence (use as inspiration, do NOT copy):"]
 
@@ -180,7 +178,7 @@ class GenerationEngine:
         if patterns.sample_headlines:
             lines.append("- Competitor headline examples:")
             for hl in patterns.sample_headlines:
-                lines.append(f"  * \"{hl}\"")
+                lines.append(f'  * "{hl}"')
 
         competitive_text = "\n".join(lines)
 
@@ -265,7 +263,7 @@ Generate the ad copy now."""
         token_count = 0
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             meta = response.usage_metadata
-            token_count = (getattr(meta, "total_token_count", 0) or 0)
+            token_count = getattr(meta, "total_token_count", 0) or 0
 
         parsed = json.loads(response.text)
         return parsed, token_count

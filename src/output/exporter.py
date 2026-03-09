@@ -197,9 +197,7 @@ def export_summary_stats(
     avg_weighted_score = sum(weighted_avgs) / len(weighted_avgs) if weighted_avgs else 0.0
 
     # Token spend
-    spend_row = db_conn.execute(
-        "SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM ads"
-    ).fetchone()
+    spend_row = db_conn.execute("SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM ads").fetchone()
     eval_spend_row = db_conn.execute(
         "SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM evaluations"
     ).fetchone()
@@ -217,9 +215,7 @@ def export_summary_stats(
         "SELECT source_ad_id, MAX(cycle_number) as max_cycle, "
         "MAX(delta_weighted_avg) as best_delta FROM iterations GROUP BY source_ad_id"
     ).fetchall()
-    avg_cycles = (
-        sum(r["max_cycle"] for r in iter_rows) / len(iter_rows) if iter_rows else 0.0
-    )
+    avg_cycles = sum(r["max_cycle"] for r in iter_rows) / len(iter_rows) if iter_rows else 0.0
     improved = sum(1 for r in iter_rows if (r["best_delta"] or 0) > 0)
     improvement_rate = improved / len(iter_rows) if iter_rows else 0.0
 

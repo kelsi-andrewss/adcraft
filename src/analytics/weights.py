@@ -88,9 +88,7 @@ class WeightEvolver:
         dim_score_lists: dict[str, list[float]] = {d: [] for d in DIMENSIONS}
 
         for scores in complete_ads.values():
-            w_avg = sum(
-                scores[d] * self._initial_weights[d] for d in DIMENSIONS
-            )
+            w_avg = sum(scores[d] * self._initial_weights[d] for d in DIMENSIONS)
             weighted_avgs.append(w_avg)
             for d in DIMENSIONS:
                 dim_score_lists[d].append(scores[d])
@@ -135,9 +133,7 @@ class WeightEvolver:
                 "divergence": divergence,
             }
 
-        flagged = {
-            d: v for d, v in comparison.items() if v["divergence"] > 0.15
-        }
+        flagged = {d: v for d, v in comparison.items() if v["divergence"] > 0.15}
 
         if flagged:
             log_decision(
@@ -160,9 +156,7 @@ class WeightEvolver:
 
         return comparison
 
-    def recommend_weights(
-        self, correlations: dict[str, float]
-    ) -> dict[str, float]:
+    def recommend_weights(self, correlations: dict[str, float]) -> dict[str, float]:
         """Normalize correlations to sum to 1.0 as recommended weights.
 
         Clamps negative correlations to a small positive floor (0.05) so
@@ -197,9 +191,7 @@ class WeightEvolver:
         recommendations.
         """
         # Check sample size
-        row = self._conn.execute(
-            "SELECT COUNT(DISTINCT ad_id) as cnt FROM evaluations"
-        ).fetchone()
+        row = self._conn.execute("SELECT COUNT(DISTINCT ad_id) as cnt FROM evaluations").fetchone()
         sample_count = row[0] if row else 0
 
         if sample_count < self._min_sample_size:
@@ -244,8 +236,7 @@ class WeightEvolver:
             "analytics",
             "evolve_complete",
             f"Weight evolution complete for {sample_count} ads. "
-            f"Recommendation: "
-            + ", ".join(f"{d}={w:.3f}" for d, w in recommended.items()),
+            f"Recommendation: " + ", ".join(f"{d}={w:.3f}" for d, w in recommended.items()),
             result,
         )
 

@@ -91,9 +91,7 @@ class TestExportAdLibrary:
     def test_export_creates_parent_dirs(self, seeded_db) -> None:
         db_conn, _ = seeded_db
         with tempfile.TemporaryDirectory() as tmpdir:
-            path = export_ad_library(
-                db_conn, "json", Path(tmpdir) / "nested" / "deep" / "ads.json"
-            )
+            path = export_ad_library(db_conn, "json", Path(tmpdir) / "nested" / "deep" / "ads.json")
             assert path.exists()
 
     def test_export_empty_db(self, db_conn) -> None:

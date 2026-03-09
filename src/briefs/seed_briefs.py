@@ -19,12 +19,10 @@ SEED_BRIEFS: list[AdBrief] = [
     AdBrief(
         audience_segment="parent",
         product_offer=(
-            "Varsity Tutors SAT Prep — 1-on-1 live tutoring "
-            "with score improvement guarantee"
+            "Varsity Tutors SAT Prep — 1-on-1 live tutoring with score improvement guarantee"
         ),
         campaign_goal=(
-            "Drive sign-ups by framing SAT prep as a high-ROI "
-            "investment in the child's future"
+            "Drive sign-ups by framing SAT prep as a high-ROI investment in the child's future"
         ),
         tone="authoritative",
         competitive_context=COMPETITIVE_CONTEXT,
@@ -40,8 +38,7 @@ SEED_BRIEFS: list[AdBrief] = [
         audience_segment="parent",
         product_offer="Varsity Tutors SAT Prep — expert tutors matched to student learning style",
         campaign_goal=(
-            "Create urgency around college admissions timelines "
-            "and competitive advantage"
+            "Create urgency around college admissions timelines and competitive advantage"
         ),
         tone="urgent",
         competitive_context=COMPETITIVE_CONTEXT,
@@ -64,8 +61,7 @@ SEED_BRIEFS: list[AdBrief] = [
     AdBrief(
         audience_segment="student",
         product_offer=(
-            "Varsity Tutors SAT Prep — real tutors, not just videos, "
-            "available when you need them"
+            "Varsity Tutors SAT Prep — real tutors, not just videos, available when you need them"
         ),
         campaign_goal="Build confidence by showing SAT prep can be low-stress and even engaging",
         tone="casual",
@@ -74,8 +70,7 @@ SEED_BRIEFS: list[AdBrief] = [
     AdBrief(
         audience_segment="student",
         product_offer=(
-            "Varsity Tutors SAT Prep — proven score boosts "
-            "that open doors to top colleges"
+            "Varsity Tutors SAT Prep — proven score boosts that open doors to top colleges"
         ),
         campaign_goal="Connect higher SAT scores to college independence and future opportunities",
         tone="aspirational",
@@ -84,8 +79,7 @@ SEED_BRIEFS: list[AdBrief] = [
     AdBrief(
         audience_segment="student",
         product_offer=(
-            "Varsity Tutors SAT Prep — study smarter with "
-            "AI-powered practice + live tutor support"
+            "Varsity Tutors SAT Prep — study smarter with AI-powered practice + live tutor support"
         ),
         campaign_goal="Leverage peer comparison to drive sign-ups — don't fall behind classmates",
         tone="motivational",

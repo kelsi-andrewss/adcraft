@@ -98,10 +98,7 @@ def _compute_weighted_score(evals: list[dict]) -> float | None:
     dim_scores = {e["dimension"]: e["score"] for e in evals if e.get("dimension")}
     if not dim_scores:
         return None
-    return sum(
-        dim_scores.get(dim, 0.0) * weight
-        for dim, weight in DIMENSION_WEIGHTS.items()
-    )
+    return sum(dim_scores.get(dim, 0.0) * weight for dim, weight in DIMENSION_WEIGHTS.items())
 
 
 def _pass_icon(passed: bool) -> str:
@@ -150,9 +147,7 @@ with st.sidebar:
     total_iterations = iter_count_row["cnt"] if iter_count_row else 0
 
     # Total cost
-    cost_row = conn.execute(
-        "SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM ads"
-    ).fetchone()
+    cost_row = conn.execute("SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM ads").fetchone()
     ad_cost = cost_row["total"] if cost_row else 0.0
     eval_cost_row = conn.execute(
         "SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM evaluations"
@@ -199,13 +194,9 @@ with tab_library:
         # Filters
         filter_col1, filter_col2 = st.columns([1, 3])
         with filter_col1:
-            status_filter = st.selectbox(
-                "Status", ["All", "Pass", "Fail"], key="lib_status"
-            )
+            status_filter = st.selectbox("Status", ["All", "Pass", "Fail"], key="lib_status")
         with filter_col2:
-            search_query = st.text_input(
-                "Search headlines & primary text", key="lib_search"
-            )
+            search_query = st.text_input("Search headlines & primary text", key="lib_search")
 
         # Build display data
         rows = []
@@ -256,13 +247,9 @@ with tab_library:
                 column_config={
                     "id": st.column_config.TextColumn("ID", width="small"),
                     "headline": st.column_config.TextColumn("Headline", width="medium"),
-                    "primary_text": st.column_config.TextColumn(
-                        "Primary Text", width="large"
-                    ),
+                    "primary_text": st.column_config.TextColumn("Primary Text", width="large"),
                     "cta": st.column_config.TextColumn("CTA", width="small"),
-                    "score": st.column_config.NumberColumn(
-                        "Score", format="%.2f", width="small"
-                    ),
+                    "score": st.column_config.NumberColumn("Score", format="%.2f", width="small"),
                     "status": st.column_config.TextColumn("Status", width="small"),
                     "created": st.column_config.TextColumn("Created", width="medium"),
                 },
@@ -272,9 +259,7 @@ with tab_library:
             for row in rows:
                 ad_data = row["_ad"]
                 evals_data = row["_evals"]
-                with st.expander(
-                    f"{row['headline']} — {row['status']} ({row['score']})"
-                ):
+                with st.expander(f"{row['headline']} — {row['status']} ({row['score']})"):
                     dcol1, dcol2 = st.columns(2)
                     with dcol1:
                         st.subheader("Ad Copy")
@@ -287,9 +272,7 @@ with tab_library:
                         st.subheader("Dimension Scores")
                         for ev in evals_data:
                             dim_name = (ev.get("dimension") or "").replace("_", " ").title()
-                            st.markdown(
-                                f"**{dim_name}:** {ev.get('score', 'N/A')}"
-                            )
+                            st.markdown(f"**{dim_name}:** {ev.get('score', 'N/A')}")
                             if ev.get("rationale"):
                                 st.caption(ev["rationale"])
         else:
@@ -335,8 +318,7 @@ with tab_iter:
 
     if total_iterations == 0:
         st.info(
-            "No iteration history yet — run the pipeline to generate "
-            "ads with iteration cycles."
+            "No iteration history yet — run the pipeline to generate ads with iteration cycles."
         )
     else:
         # Find ads that have been iterated on (they appear as source_ad_id)
@@ -363,9 +345,7 @@ with tab_iter:
         )
 
         # Reverse-lookup the ID
-        selected_id = next(
-            (k for k, v in ad_labels.items() if v == selected_label), None
-        )
+        selected_id = next((k for k, v in ad_labels.items() if v == selected_label), None)
 
         if selected_id:
             # Build the iteration chain: source -> target -> target -> ...
@@ -408,8 +388,7 @@ with tab_iter:
                 with st.container(border=True):
                     step_label = "Original" if idx == 0 else f"Cycle {idx}"
                     st.markdown(
-                        f"### :{status_color}[{step_label}] — "
-                        f"{ad_data.get('headline', 'N/A')}"
+                        f"### :{status_color}[{step_label}] — {ad_data.get('headline', 'N/A')}"
                     )
 
                     mcol1, mcol2, mcol3 = st.columns(3)
@@ -426,9 +405,7 @@ with tab_iter:
                         mcol2.metric("Action", iter_meta.get("action_type", "N/A"))
                         mcol3.metric(
                             "Weak Dimension",
-                            (iter_meta.get("weak_dimension") or "N/A")
-                            .replace("_", " ")
-                            .title(),
+                            (iter_meta.get("weak_dimension") or "N/A").replace("_", " ").title(),
                         )
                     else:
                         mcol2.metric("Action", "Initial Generation")
@@ -438,20 +415,12 @@ with tab_iter:
                     with st.expander("Details"):
                         dcol1, dcol2 = st.columns(2)
                         with dcol1:
-                            st.markdown(
-                                f"**Primary Text:** {ad_data.get('primary_text', '')}"
-                            )
-                            st.markdown(
-                                f"**Description:** {ad_data.get('description', '')}"
-                            )
+                            st.markdown(f"**Primary Text:** {ad_data.get('primary_text', '')}")
+                            st.markdown(f"**Description:** {ad_data.get('description', '')}")
                             st.markdown(f"**CTA:** {ad_data.get('cta_button', '')}")
                         with dcol2:
                             for ev in evals:
-                                dim_name = (
-                                    (ev.get("dimension") or "")
-                                    .replace("_", " ")
-                                    .title()
-                                )
+                                dim_name = (ev.get("dimension") or "").replace("_", " ").title()
                                 st.markdown(f"**{dim_name}:** {ev.get('score', 'N/A')}")
 
                 prev_score = score
@@ -487,9 +456,7 @@ with tab_decisions:
                 "Filter by component", options=components, key="dec_components"
             )
         with fcol2:
-            dec_search = st.text_input(
-                "Search action / rationale", key="dec_search"
-            )
+            dec_search = st.text_input("Search action / rationale", key="dec_search")
 
         # Filter
         filtered = all_decisions
@@ -513,24 +480,16 @@ with tab_decisions:
             df_dec = pd.DataFrame(filtered)[
                 ["timestamp", "component", "action", "rationale", "agent_id"]
             ]
-            df_dec["rationale"] = df_dec["rationale"].apply(
-                lambda x: _truncate(x, 100)
-            )
+            df_dec["rationale"] = df_dec["rationale"].apply(lambda x: _truncate(x, 100))
             st.dataframe(
                 df_dec,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "timestamp": st.column_config.TextColumn(
-                        "Timestamp", width="medium"
-                    ),
-                    "component": st.column_config.TextColumn(
-                        "Component", width="small"
-                    ),
+                    "timestamp": st.column_config.TextColumn("Timestamp", width="medium"),
+                    "component": st.column_config.TextColumn("Component", width="small"),
                     "action": st.column_config.TextColumn("Action", width="medium"),
-                    "rationale": st.column_config.TextColumn(
-                        "Rationale", width="large"
-                    ),
+                    "rationale": st.column_config.TextColumn("Rationale", width="large"),
                     "agent_id": st.column_config.TextColumn("Agent", width="small"),
                 },
             )
@@ -565,9 +524,7 @@ with tab_cost:
 
         # Best quality-per-dollar from snapshots
         qpd_values = [
-            s["quality_per_dollar"]
-            for s in snapshots
-            if s.get("quality_per_dollar") is not None
+            s["quality_per_dollar"] for s in snapshots if s.get("quality_per_dollar") is not None
         ]
         best_qpd = max(qpd_values) if qpd_values else 0.0
 

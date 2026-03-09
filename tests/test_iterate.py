@@ -63,8 +63,10 @@ def _make_eval(
     ]
     # Compute actual weighted average
     weights = {
-        "clarity": 0.25, "value_prop": 0.25,
-        "cta_effectiveness": 0.20, "brand_voice": 0.15,
+        "clarity": 0.25,
+        "value_prop": 0.25,
+        "cta_effectiveness": 0.20,
+        "brand_voice": 0.15,
         "emotional_resonance": 0.15,
     }
     w_avg = sum(s.score * weights[s.dimension] for s in scores)
@@ -235,13 +237,23 @@ class TestIterationController:
         """Component fix drops weighted_avg by >0.5, controller falls back to full regen."""
         # Initial eval: failing but decent
         initial_eval = _make_eval(
-            "", clarity=5.0, value_prop=5.0, cta_effectiveness=5.0,
-            brand_voice=5.0, emotional_resonance=5.0, passed=False,
+            "",
+            clarity=5.0,
+            value_prop=5.0,
+            cta_effectiveness=5.0,
+            brand_voice=5.0,
+            emotional_resonance=5.0,
+            passed=False,
         )
         # After component fix: coherence broken (big drop)
         broken_eval = _make_eval(
-            "", clarity=6.0, value_prop=2.0, cta_effectiveness=2.0,
-            brand_voice=2.0, emotional_resonance=2.0, passed=False,
+            "",
+            clarity=6.0,
+            value_prop=2.0,
+            cta_effectiveness=2.0,
+            brand_voice=2.0,
+            emotional_resonance=2.0,
+            passed=False,
         )
         # After full regen: passes
         regen_eval = _make_eval("", passed=True)
@@ -332,9 +344,7 @@ class TestIterationController:
         controller.iterate(SAMPLE_BRIEF)
 
         # Extract all log_decision actions from controller calls
-        ctrl_actions = [
-            call.args[1] for call in mock_ctrl_log.call_args_list
-        ]
+        ctrl_actions = [call.args[1] for call in mock_ctrl_log.call_args_list]
 
         # Must have loop_start, generate_cycle, and at least one terminal state
         assert "loop_start" in ctrl_actions

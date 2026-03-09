@@ -1,6 +1,5 @@
 """Tests for parameterized SQL query helpers."""
 
-
 from src.db.queries import (
     get_ad,
     get_evaluations_for_ad,

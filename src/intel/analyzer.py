@@ -17,7 +17,12 @@ from src.db.queries import insert_competitor_ad
 from src.decisions.logger import log_decision
 
 REQUIRED_FIELDS = {
-    "brand", "primary_text", "headline", "cta_button", "hook_type", "emotional_angle"
+    "brand",
+    "primary_text",
+    "headline",
+    "cta_button",
+    "hook_type",
+    "emotional_angle",
 }
 
 

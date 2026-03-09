@@ -300,9 +300,7 @@ def build_all_dimensions_prompt(
     cta_button: str,
 ) -> str:
     """Build a prompt for evaluating all dimensions in one call."""
-    combined_rubrics = "\n\n".join(
-        f"--- {dim.upper()} ---\n{RUBRICS[dim]}" for dim in DIMENSIONS
-    )
+    combined_rubrics = "\n\n".join(f"--- {dim.upper()} ---\n{RUBRICS[dim]}" for dim in DIMENSIONS)
 
     # Use abbreviated examples for all-dimensions to manage prompt length
     combined_examples = "\n\n".join(

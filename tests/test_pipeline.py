@@ -80,22 +80,16 @@ class TestBatchPipeline:
     @patch("src.pipeline.main.log_decision")
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
-    def test_full_pipeline_loop(
-        self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn
-    ):
+    def test_full_pipeline_loop(self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn):
         """Single brief -> gen -> eval -> pass (happy path)."""
         mock_gen = MagicMock()
         mock_eval = MagicMock()
         mock_gen.generate.return_value = SAMPLE_AD
         mock_eval.evaluate_iteration.return_value = _passing_eval()
 
-        pipeline = BatchPipeline(
-            db_path=":memory:", generator=mock_gen, evaluator=mock_eval
-        )
+        pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
         # Replace the controller's conn with our test db_conn
-        pipeline._controller = IterationController(
-            mock_gen, mock_eval, SelfHealer(), db_conn
-        )
+        pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
         result = pipeline.run([SAMPLE_BRIEF])
@@ -107,9 +101,7 @@ class TestBatchPipeline:
     @patch("src.pipeline.main.log_decision")
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
-    def test_pipeline_with_iteration(
-        self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn
-    ):
+    def test_pipeline_with_iteration(self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn):
         """Brief that needs 2 cycles to pass."""
         mock_gen = MagicMock()
         mock_eval = MagicMock()
@@ -132,12 +124,8 @@ class TestBatchPipeline:
             _passing_eval(),  # pipeline's final eval call
         ]
 
-        pipeline = BatchPipeline(
-            db_path=":memory:", generator=mock_gen, evaluator=mock_eval
-        )
-        pipeline._controller = IterationController(
-            mock_gen, mock_eval, SelfHealer(), db_conn
-        )
+        pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
+        pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
         result = pipeline.run([SAMPLE_BRIEF])
@@ -192,12 +180,8 @@ class TestBatchPipeline:
         eval_sequence = [failing_eval] * 10 + [passing_eval] * 5
         mock_eval.evaluate_iteration.side_effect = eval_sequence
 
-        pipeline = BatchPipeline(
-            db_path=":memory:", generator=mock_gen, evaluator=mock_eval
-        )
-        pipeline._controller = IterationController(
-            mock_gen, mock_eval, SelfHealer(), db_conn
-        )
+        pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
+        pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
         result = pipeline.run([SAMPLE_BRIEF, SAMPLE_BRIEF])
@@ -211,21 +195,15 @@ class TestBatchPipeline:
     @patch("src.pipeline.main.log_decision")
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
-    def test_quality_snapshot_persisted(
-        self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn
-    ):
+    def test_quality_snapshot_persisted(self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn):
         """After batch, query DB for quality_snapshot row."""
         mock_gen = MagicMock()
         mock_eval = MagicMock()
         mock_gen.generate.return_value = SAMPLE_AD
         mock_eval.evaluate_iteration.return_value = _passing_eval()
 
-        pipeline = BatchPipeline(
-            db_path=":memory:", generator=mock_gen, evaluator=mock_eval
-        )
-        pipeline._controller = IterationController(
-            mock_gen, mock_eval, SelfHealer(), db_conn
-        )
+        pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
+        pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
         pipeline.run([SAMPLE_BRIEF])
@@ -238,9 +216,7 @@ class TestBatchPipeline:
     @patch("src.pipeline.main.log_decision")
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
-    def test_batch_result_accuracy(
-        self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn
-    ):
+    def test_batch_result_accuracy(self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn):
         """Verify passed/failed/total counts match actual outcomes."""
         mock_gen = MagicMock()
         mock_eval = MagicMock()
@@ -260,12 +236,8 @@ class TestBatchPipeline:
         mock_gen.generate.side_effect = ads
         mock_eval.evaluate_iteration.return_value = _passing_eval()
 
-        pipeline = BatchPipeline(
-            db_path=":memory:", generator=mock_gen, evaluator=mock_eval
-        )
-        pipeline._controller = IterationController(
-            mock_gen, mock_eval, SelfHealer(), db_conn
-        )
+        pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
+        pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
         briefs = [SAMPLE_BRIEF, SAMPLE_BRIEF, SAMPLE_BRIEF]
@@ -278,28 +250,20 @@ class TestBatchPipeline:
     @patch("src.pipeline.main.log_decision")
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
-    def test_decision_log_coverage(
-        self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn
-    ):
+    def test_decision_log_coverage(self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn):
         """Verify log_decision called for batch_start and batch_complete."""
         mock_gen = MagicMock()
         mock_eval = MagicMock()
         mock_gen.generate.return_value = SAMPLE_AD
         mock_eval.evaluate_iteration.return_value = _passing_eval()
 
-        pipeline = BatchPipeline(
-            db_path=":memory:", generator=mock_gen, evaluator=mock_eval
-        )
-        pipeline._controller = IterationController(
-            mock_gen, mock_eval, SelfHealer(), db_conn
-        )
+        pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
+        pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
         pipeline.run([SAMPLE_BRIEF])
 
-        pipe_actions = [
-            call.args[1] for call in mock_pipe_log.call_args_list
-        ]
+        pipe_actions = [call.args[1] for call in mock_pipe_log.call_args_list]
 
         assert "batch_start" in pipe_actions
         assert "batch_complete" in pipe_actions
@@ -307,9 +271,7 @@ class TestBatchPipeline:
     @patch("src.pipeline.main.log_decision")
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
-    def test_brief_error_handled(
-        self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn
-    ):
+    def test_brief_error_handled(self, mock_heal_log, mock_ctrl_log, mock_pipe_log, db_conn):
         """Inject exception in one brief, verify pipeline continues and logs the error."""
         mock_gen = MagicMock()
         mock_eval = MagicMock()
@@ -321,12 +283,8 @@ class TestBatchPipeline:
         ]
         mock_eval.evaluate_iteration.return_value = _passing_eval()
 
-        pipeline = BatchPipeline(
-            db_path=":memory:", generator=mock_gen, evaluator=mock_eval
-        )
-        pipeline._controller = IterationController(
-            mock_gen, mock_eval, SelfHealer(), db_conn
-        )
+        pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
+        pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
         result = pipeline.run([SAMPLE_BRIEF, SAMPLE_BRIEF])
@@ -334,8 +292,6 @@ class TestBatchPipeline:
         assert result.total_briefs == 2
         assert result.errors >= 1
         # Pipeline didn't crash — batch_complete should be logged
-        pipe_actions = [
-            call.args[1] for call in mock_pipe_log.call_args_list
-        ]
+        pipe_actions = [call.args[1] for call in mock_pipe_log.call_args_list]
         assert "brief_error" in pipe_actions
         assert "batch_complete" in pipe_actions

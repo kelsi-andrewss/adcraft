@@ -100,9 +100,7 @@ class RateLimiter:
                 f"Daily request limit ({self._rpd_limit}) reached. Cannot proceed.",
                 {"rpd_limit": self._rpd_limit, "daily_count": self._daily_count},
             )
-            raise RuntimeError(
-                f"Daily request limit ({self._rpd_limit}) reached"
-            )
+            raise RuntimeError(f"Daily request limit ({self._rpd_limit}) reached")
 
         self._call_timestamps.append(time.time())
         self._daily_count += 1
@@ -132,8 +130,7 @@ class BatchPipeline:
         log_decision(
             "pipeline",
             "pipeline_init",
-            f"BatchPipeline initialized: db_path={db_path}, "
-            f"rpm={rpm_limit}, rpd={rpd_limit}",
+            f"BatchPipeline initialized: db_path={db_path}, rpm={rpm_limit}, rpd={rpd_limit}",
             {"db_path": db_path, "rpm_limit": rpm_limit, "rpd_limit": rpd_limit},
         )
 
@@ -168,10 +165,7 @@ class BatchPipeline:
         )
 
         for i, brief in enumerate(briefs, 1):
-            label = (
-                f"{brief.audience_segment} x "
-                f"{brief.product_offer[:30]} x {brief.tone}"
-            )
+            label = f"{brief.audience_segment} x {brief.product_offer[:30]} x {brief.tone}"
             print(f"[{i}/{len(briefs)}] Processing: {label}")
 
             try:
@@ -226,9 +220,7 @@ class BatchPipeline:
                 print(f"  ERROR: {exc}", file=sys.stderr)
 
         result.duration_seconds = time.time() - start_time
-        result.avg_score = (
-            sum(result.scores) / len(result.scores) if result.scores else 0.0
-        )
+        result.avg_score = sum(result.scores) / len(result.scores) if result.scores else 0.0
 
         # Persist quality snapshot
         self._persist_quality_snapshot(result)
@@ -264,9 +256,7 @@ class BatchPipeline:
             total_ads=result.total_briefs,
             token_spend_usd=result.total_cost_usd,
             quality_per_dollar=(
-                result.avg_score / result.total_cost_usd
-                if result.total_cost_usd > 0
-                else None
+                result.avg_score / result.total_cost_usd if result.total_cost_usd > 0 else None
             ),
         )
 
