@@ -9,6 +9,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai.errors import ClientError, ServerError
 
 from src.evaluate.engine import EvaluationEngine
 from src.evaluate.rubrics import (
@@ -250,11 +251,11 @@ def test_passing_threshold_at_6_4_fails(mock_log):
 
 @patch("src.evaluate.engine.log_decision")
 def test_retry_on_api_error(mock_log):
-    """Engine retries on API error then succeeds."""
+    """Engine retries on transient API error then succeeds."""
     mock_client = MagicMock()
     good_response = _mock_response(_make_all_dimensions_response())
     mock_client.models.generate_content.side_effect = [
-        Exception("429 rate limit"),
+        ServerError(500, {"error": {"message": "Internal error", "status": "INTERNAL"}}),
         good_response,
     ]
 
@@ -263,6 +264,21 @@ def test_retry_on_api_error(mock_log):
 
     assert len(result.scores) == 5
     assert mock_client.models.generate_content.call_count == 2
+
+
+@patch("src.evaluate.engine.log_decision")
+def test_no_retry_on_client_error(mock_log):
+    """Engine does NOT retry on non-transient client errors (e.g., 400)."""
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = ClientError(
+        400, {"error": {"message": "Invalid request", "status": "INVALID_ARGUMENT"}}
+    )
+
+    engine = _make_engine(mock_client)
+    with pytest.raises(ClientError):
+        engine.evaluate_iteration(_make_ad())
+
+    assert mock_client.models.generate_content.call_count == 1
 
 
 # ---------------------------------------------------------------------------
