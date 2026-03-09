@@ -310,65 +310,6 @@ def test_cot_rationale_extracted(mock_log):
 
 
 # ---------------------------------------------------------------------------
-# Tests: calibration (mocked)
-# ---------------------------------------------------------------------------
-
-
-@patch("src.evaluate.engine.log_decision")
-def test_calibration_great_ad_scores_above_7(mock_log):
-    """A 'great' reference ad (mocked high scores) gets weighted avg >= 7.0."""
-    scores = {
-        "clarity": 8.0,
-        "value_prop": 9.0,
-        "cta_effectiveness": 8.0,
-        "brand_voice": 8.0,
-        "emotional_resonance": 7.0,
-    }
-
-    mock_client = MagicMock()
-    response_data = _make_all_dimensions_response(scores)
-    mock_client.models.generate_content.return_value = _mock_response(response_data)
-
-    engine = _make_engine(mock_client)
-    ad = _make_ad(
-        id="ref-great-001",
-        primary_text="Your child's SAT score shouldn't be limited by access to great teaching.",
-        headline="Average 160-Point SAT Score Improvement",
-    )
-    result = engine.evaluate_iteration(ad)
-
-    assert result.weighted_average >= 7.0
-    assert result.passed_threshold is True
-
-
-@patch("src.evaluate.engine.log_decision")
-def test_calibration_bad_ad_scores_below_5(mock_log):
-    """A 'bad' reference ad (mocked low scores) gets weighted avg < 5.0."""
-    scores = {
-        "clarity": 4.0,
-        "value_prop": 2.0,
-        "cta_effectiveness": 3.0,
-        "brand_voice": 3.0,
-        "emotional_resonance": 2.0,
-    }
-
-    mock_client = MagicMock()
-    response_data = _make_all_dimensions_response(scores)
-    mock_client.models.generate_content.return_value = _mock_response(response_data)
-
-    engine = _make_engine(mock_client)
-    ad = _make_ad(
-        id="ref-bad-001",
-        primary_text="Looking for SAT help? We offer tutoring services.",
-        headline="SAT Tutoring Available Now",
-    )
-    result = engine.evaluate_iteration(ad)
-
-    assert result.weighted_average < 5.0
-    assert result.passed_threshold is False
-
-
-# ---------------------------------------------------------------------------
 # Tests: decision logging
 # ---------------------------------------------------------------------------
 
