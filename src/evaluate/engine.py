@@ -16,6 +16,7 @@ import os
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
+from PIL import Image as PILImage
 from tenacity import (
     retry,
     retry_if_exception,
@@ -33,6 +34,13 @@ from src.evaluate.rubrics import (
     SINGLE_DIMENSION_SCHEMA,
     build_all_dimensions_prompt,
     build_single_dimension_prompt,
+)
+from src.evaluate.visual_rubrics import (
+    VISUAL_ALL_DIMENSIONS_SCHEMA,
+    VISUAL_DIMENSIONS,
+    VISUAL_SINGLE_DIMENSION_SCHEMA,
+    build_visual_all_dimensions_prompt,
+    build_visual_single_dimension_prompt,
 )
 from src.models.ad import AdCopy
 from src.models.evaluation import DimensionScore, EvaluationResult
@@ -148,6 +156,112 @@ class EvaluationEngine:
 
         return self._compute_result(ad_copy.id, scores, total_tokens, mode="final")
 
+    def evaluate_visual(
+        self,
+        image: PILImage.Image,
+        ad_copy: AdCopy,
+        eval_mode: str = "iteration",
+    ) -> list[DimensionScore]:
+        """Score 3 visual dimensions via multimodal Gemini call.
+
+        Args:
+            image: PIL Image of the ad creative.
+            ad_copy: The ad copy paired with this image.
+            eval_mode: "iteration" (1 API call, all dims) or "final" (3 calls).
+
+        Returns:
+            List of DimensionScore for the 3 visual dimensions.
+        """
+        log_decision(
+            "evaluator",
+            "evaluate_visual_start",
+            f"Evaluating ad '{ad_copy.id}' visual in {eval_mode} mode",
+            {"ad_id": ad_copy.id, "mode": eval_mode},
+        )
+
+        ad_copy_text = (
+            f"Ad copy:\n"
+            f"Headline: {ad_copy.headline}\n"
+            f"Primary text: {ad_copy.primary_text}\n"
+            f"Description: {ad_copy.description}\n"
+            f"CTA: {ad_copy.cta_button}"
+        )
+
+        scores: list[DimensionScore] = []
+        total_tokens = 0
+
+        if eval_mode == "iteration":
+            prompt_text = build_visual_all_dimensions_prompt()
+            contents: list = [prompt_text, image, ad_copy_text]
+
+            raw, token_count = self._call_gemini_multimodal(contents, VISUAL_ALL_DIMENSIONS_SCHEMA)
+            total_tokens += token_count
+
+            for dim in VISUAL_DIMENSIONS:
+                dim_data = raw[dim]
+                score = DimensionScore(
+                    dimension=dim,
+                    score=float(dim_data["score"]),
+                    rationale=dim_data["rationale"],
+                    confidence=float(dim_data.get("confidence", 1.0)),
+                )
+                scores.append(score)
+                log_decision(
+                    "evaluator",
+                    "visual_dimension_score",
+                    f"{dim}={score.score:.1f} — {score.rationale[:100]}",
+                    {
+                        "ad_id": ad_copy.id,
+                        "dimension": dim,
+                        "score": score.score,
+                        "mode": "iteration",
+                    },
+                )
+        else:
+            for dim in VISUAL_DIMENSIONS:
+                prompt_text = build_visual_single_dimension_prompt(dim)
+                contents = [prompt_text, image, ad_copy_text]
+
+                raw, token_count = self._call_gemini_multimodal(
+                    contents, VISUAL_SINGLE_DIMENSION_SCHEMA
+                )
+                total_tokens += token_count
+
+                score = DimensionScore(
+                    dimension=dim,
+                    score=float(raw["score"]),
+                    rationale=raw["rationale"],
+                    confidence=float(raw.get("confidence", 1.0)),
+                )
+                scores.append(score)
+                log_decision(
+                    "evaluator",
+                    "visual_dimension_score",
+                    f"{dim}={score.score:.1f} — {score.rationale[:100]}",
+                    {
+                        "ad_id": ad_copy.id,
+                        "dimension": dim,
+                        "score": score.score,
+                        "mode": "final",
+                    },
+                )
+
+        log_decision(
+            "evaluator",
+            "evaluate_visual_complete",
+            f"Visual evaluation complete for ad '{ad_copy.id}': "
+            f"{', '.join(f'{s.dimension}={s.score:.1f}' for s in scores)}, "
+            f"total_tokens={total_tokens}",
+            {
+                "ad_id": ad_copy.id,
+                "mode": eval_mode,
+                "total_tokens": total_tokens,
+                "scores": {s.dimension: s.score for s in scores},
+            },
+        )
+
+        return scores
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -249,6 +363,68 @@ class EvaluationEngine:
                 "evaluator",
                 "api_error",
                 f"Gemini call failed (non-API error, will not retry): {type(exc).__name__}: {exc}",
+                {"model": self._model, "error": str(exc), "retriable": False},
+            )
+            raise
+
+        token_count = 0
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            meta = response.usage_metadata
+            token_count = getattr(meta, "total_token_count", 0) or 0
+
+        parsed = json.loads(response.text)
+        return parsed, token_count
+
+    def _call_gemini_multimodal(self, contents: list, schema: dict) -> tuple[dict, int]:
+        """Call Gemini with multimodal content list and structured output.
+
+        Similar to _call_gemini but accepts a content list (mixed text + image
+        parts) instead of a single prompt string.
+
+        Returns (parsed_response_dict, total_token_count).
+        """
+        return self._call_gemini_multimodal_with_retry(contents, schema)
+
+    @retry(
+        retry=retry_if_exception(_is_retriable),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=60),
+        reraise=True,
+    )
+    def _call_gemini_multimodal_with_retry(self, contents: list, schema: dict) -> tuple[dict, int]:
+        """Inner multimodal call with tenacity retry decorator."""
+        try:
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=schema,
+                    safety_settings=SAFETY_SETTINGS,
+                    http_options=types.HttpOptions(timeout=180_000),
+                ),
+            )
+        except APIError as exc:
+            retriable = _is_retriable(exc)
+            log_decision(
+                "evaluator",
+                "api_retry" if retriable else "api_error",
+                f"Gemini multimodal call failed ({exc.code} {exc.status}), "
+                f"{'will retry' if retriable else 'non-retriable'}: {exc}",
+                {
+                    "model": self._model,
+                    "error": str(exc),
+                    "code": exc.code,
+                    "retriable": retriable,
+                },
+            )
+            raise
+        except Exception as exc:
+            log_decision(
+                "evaluator",
+                "api_error",
+                f"Gemini multimodal call failed (non-API error, will not retry): "
+                f"{type(exc).__name__}: {exc}",
                 {"model": self._model, "error": str(exc), "retriable": False},
             )
             raise
