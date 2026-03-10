@@ -1,7 +1,10 @@
 """Batch pipeline for AdCraft — orchestrates generation/evaluation/iteration.
 
 Processes a brief matrix sequentially with rate limiting, tracking pass/fail
-counts and persisting quality snapshots after each batch.
+counts and persisting quality snapshots after each batch. After text iteration
+passes, qualifying ads flow through image generation, variant selection,
+composed evaluation, and DB persistence. The visual path is gated by quality
+threshold, wrapped by VisualCircuitBreaker, and skippable via --no-images.
 
 Entry point: python -m src.pipeline.main
 """
@@ -15,15 +18,24 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
+from PIL import Image as PILImage
+
 from src.briefs.seed_briefs import get_seed_briefs
 from src.db.init_db import init_db
-from src.db.queries import insert_quality_snapshot
+from src.db.queries import insert_quality_snapshot, update_ad_image
 from src.decisions.logger import log_decision
+from src.evaluate.composed import ComposedEvaluator
 from src.evaluate.engine import EvaluationEngine
 from src.generate.engine import GenerationEngine
+from src.generate.image_engine import ImageGenerationEngine
+from src.generate.variants import VariantGenerator
+from src.generate.visual_prompt import VisualPromptGenerator
 from src.iterate.controller import IterationController
 from src.iterate.healing import SelfHealer
+from src.iterate.visual_healing import VisualCircuitBreaker
+from src.models.ad import AdCopy
 from src.models.brief import AdBrief
+from src.models.creative import ImageResult
 
 
 @dataclass
@@ -40,6 +52,10 @@ class BatchResult:
     duration_seconds: float = 0.0
     errors: int = 0
     scores: list[float] = field(default_factory=list)
+    images_generated: int = 0
+    visual_cost_usd: float = 0.0
+    visual_failures: int = 0
+    circuit_breaker_tripped: bool = False
 
 
 class RateLimiter:
@@ -117,6 +133,11 @@ class BatchPipeline:
         *,
         generator: GenerationEngine | None = None,
         evaluator: EvaluationEngine | None = None,
+        image_engine: ImageGenerationEngine | None = None,
+        composed_evaluator: ComposedEvaluator | None = None,
+        prompt_generator: VisualPromptGenerator | None = None,
+        variant_generator: VariantGenerator | None = None,
+        circuit_breaker: VisualCircuitBreaker | None = None,
     ) -> None:
         self._conn = init_db(db_path)
         self._generator = generator or GenerationEngine()
@@ -127,11 +148,26 @@ class BatchPipeline:
         )
         self._rate_limiter = RateLimiter(rpm_limit=rpm_limit, rpd_limit=rpd_limit)
 
+        # Visual pipeline components
+        self._image_engine = image_engine or ImageGenerationEngine()
+        self._composed_evaluator = composed_evaluator or ComposedEvaluator()
+        self._prompt_generator = prompt_generator or VisualPromptGenerator()
+        self._variant_generator = variant_generator or VariantGenerator(
+            self._image_engine, self._evaluator, self._prompt_generator
+        )
+        self._circuit_breaker = circuit_breaker or VisualCircuitBreaker(batch_failure_threshold=0.5)
+
         log_decision(
             "pipeline",
             "pipeline_init",
-            f"BatchPipeline initialized: db_path={db_path}, rpm={rpm_limit}, rpd={rpd_limit}",
-            {"db_path": db_path, "rpm_limit": rpm_limit, "rpd_limit": rpd_limit},
+            f"BatchPipeline initialized: db_path={db_path}, rpm={rpm_limit}, rpd={rpd_limit}, "
+            "visual_pipeline=enabled",
+            {
+                "db_path": db_path,
+                "rpm_limit": rpm_limit,
+                "rpd_limit": rpd_limit,
+                "visual_pipeline": True,
+            },
         )
 
     def generate_brief_matrix(self) -> list[AdBrief]:
@@ -145,11 +181,117 @@ class BatchPipeline:
         )
         return briefs
 
-    def run(self, briefs: list[AdBrief] | None = None) -> BatchResult:
+    def _run_visual_pipeline(
+        self, ad: AdCopy, brief: AdBrief, eval_score: float
+    ) -> ImageResult | None:
+        """Run the visual pipeline for a single ad.
+
+        Gate: score must meet dynamic threshold. Then generate variants,
+        pick best, run composed eval, persist if publishable. Any exception
+        is caught and logged — visual failure never crashes the batch.
+
+        Returns the best ImageResult if the image is publishable, else None.
+        """
+        try:
+            # Gate: check threshold
+            if not self._image_engine.should_generate_image(eval_score, self._conn):
+                log_decision(
+                    "pipeline",
+                    "visual_skip_threshold",
+                    f"Ad '{ad.id}' below image gen threshold (score={eval_score:.2f})",
+                    {"ad_id": ad.id, "eval_score": eval_score},
+                )
+                return None
+
+            # Rate limiter before variant generation
+            self._rate_limiter.acquire()
+
+            # Generate + evaluate variants (decision-23: 2 variants)
+            variants = self._variant_generator.generate_variants(ad, brief, num_variants=2)
+
+            if not variants:
+                log_decision(
+                    "pipeline",
+                    "visual_no_variants",
+                    f"Ad '{ad.id}' all variants failed, keeping text-only",
+                    {"ad_id": ad.id},
+                )
+                return None
+
+            best = variants[0]  # already sorted best-first
+
+            # Load image for composed eval
+            pil_image = PILImage.open(best.file_path)
+
+            # Rate limiter before composed eval
+            self._rate_limiter.acquire()
+
+            # Composed eval — scores the complete ad unit (copy + image)
+            composed_result = self._composed_evaluator.evaluate_composed(pil_image, ad)
+
+            if not composed_result["publishable"]:
+                log_decision(
+                    "pipeline",
+                    "visual_not_publishable",
+                    f"Ad '{ad.id}' composed eval not publishable "
+                    f"(score={composed_result['composed_score']:.1f})",
+                    {
+                        "ad_id": ad.id,
+                        "composed_score": composed_result["composed_score"],
+                        "rationale": composed_result["rationale"][:200],
+                    },
+                )
+                return None
+
+            # Persist image to DB
+            update_ad_image(
+                self._conn,
+                ad.id,
+                image_path=best.file_path,
+                visual_prompt=best.generation_config.get("negative_prompt", ""),
+                image_model=best.model_id,
+                image_cost_usd=best.cost_usd,
+                variant_group_id=best.variant_group_id,
+                variant_type=best.variant_type,
+            )
+
+            log_decision(
+                "pipeline",
+                "visual_published",
+                f"Ad '{ad.id}' image published: model={best.model_id}, "
+                f"cost=${best.cost_usd:.4f}, "
+                f"composed_score={composed_result['composed_score']:.1f}",
+                {
+                    "ad_id": ad.id,
+                    "model_id": best.model_id,
+                    "cost_usd": best.cost_usd,
+                    "composed_score": composed_result["composed_score"],
+                    "variant_type": best.variant_type,
+                    "variant_group_id": best.variant_group_id,
+                },
+            )
+
+            return best
+
+        except Exception as exc:
+            log_decision(
+                "pipeline",
+                "visual_pipeline_error",
+                f"Visual pipeline error for ad '{ad.id}': {type(exc).__name__}: {exc}",
+                {
+                    "ad_id": ad.id,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
+            return None
+
+    def run(self, briefs: list[AdBrief] | None = None, *, no_images: bool = False) -> BatchResult:
         """Run the batch pipeline over the given briefs.
 
         Each brief goes through the full iterate loop. One failure
-        does not crash the batch.
+        does not crash the batch. After text iteration passes, qualifying
+        ads flow through the visual pipeline unless no_images is True.
         """
         if briefs is None:
             briefs = self.generate_brief_matrix()
@@ -157,11 +299,14 @@ class BatchPipeline:
         result = BatchResult(total_briefs=len(briefs))
         start_time = time.time()
 
+        # Reset circuit breaker state for this batch
+        self._circuit_breaker.reset_batch()
+
         log_decision(
             "pipeline",
             "batch_start",
-            f"Starting batch of {len(briefs)} briefs",
-            {"total_briefs": len(briefs)},
+            f"Starting batch of {len(briefs)} briefs (no_images={no_images})",
+            {"total_briefs": len(briefs), "no_images": no_images},
         )
 
         for i, brief in enumerate(briefs, 1):
@@ -195,6 +340,36 @@ class BatchPipeline:
                             "cycles": len(records) + 1,
                         },
                     )
+
+                    # Visual pipeline — skip if --no-images or circuit breaker tripped
+                    if not no_images:
+                        if self._circuit_breaker.check_batch_health() == "halt":
+                            result.circuit_breaker_tripped = True
+                            log_decision(
+                                "pipeline",
+                                "visual_circuit_breaker_halt",
+                                f"Circuit breaker halted image gen at brief {i}",
+                                {"brief_index": i},
+                            )
+                        else:
+                            # Determine if image gen was attempted (score above threshold)
+                            should_attempt = self._image_engine.should_generate_image(
+                                final_eval.weighted_average, self._conn
+                            )
+
+                            image_result = self._run_visual_pipeline(
+                                ad, brief, final_eval.weighted_average
+                            )
+
+                            if image_result is not None:
+                                result.images_generated += 1
+                                result.visual_cost_usd += image_result.cost_usd
+                                self._circuit_breaker.check_ad_status(ad.id)
+                            elif should_attempt:
+                                # Image gen was attempted but failed/not publishable
+                                result.visual_failures += 1
+                                self._circuit_breaker.check_ad_status(ad.id)
+
                 else:
                     result.failed += 1
                     log_decision(
@@ -221,6 +396,7 @@ class BatchPipeline:
 
         result.duration_seconds = time.time() - start_time
         result.avg_score = sum(result.scores) / len(result.scores) if result.scores else 0.0
+        result.total_cost_usd += result.visual_cost_usd
 
         # Persist quality snapshot
         self._persist_quality_snapshot(result)
@@ -230,7 +406,8 @@ class BatchPipeline:
             "batch_complete",
             f"Batch complete: {result.passed}/{result.total_briefs} passed, "
             f"avg_score={result.avg_score:.2f}, "
-            f"duration={result.duration_seconds:.1f}s",
+            f"duration={result.duration_seconds:.1f}s, "
+            f"images={result.images_generated}, visual_cost=${result.visual_cost_usd:.2f}",
             {
                 "passed": result.passed,
                 "failed": result.failed,
@@ -239,6 +416,10 @@ class BatchPipeline:
                 "avg_score": result.avg_score,
                 "total_cycles": result.total_cycles,
                 "duration_seconds": result.duration_seconds,
+                "images_generated": result.images_generated,
+                "visual_cost_usd": result.visual_cost_usd,
+                "visual_failures": result.visual_failures,
+                "circuit_breaker_tripped": result.circuit_breaker_tripped,
             },
         )
 
@@ -282,6 +463,12 @@ def main() -> None:
         default="data/ads.db",
         help="Database path (default data/ads.db)",
     )
+    parser.add_argument(
+        "--no-images",
+        action="store_true",
+        default=False,
+        help="Skip image generation (text-only pipeline)",
+    )
     args = parser.parse_args()
 
     pipeline = BatchPipeline(db_path=args.db, rpm_limit=args.rpm)
@@ -291,7 +478,7 @@ def main() -> None:
         briefs = briefs[: args.briefs]
         print(f"Limited to {len(briefs)} briefs")
 
-    result = pipeline.run(briefs)
+    result = pipeline.run(briefs, no_images=args.no_images)
 
     print("\n" + "=" * 60)
     print("BATCH SUMMARY")
@@ -302,6 +489,10 @@ def main() -> None:
     print(f"  Errors:        {result.errors}")
     print(f"  Avg score:     {result.avg_score:.2f}")
     print(f"  Total cycles:  {result.total_cycles}")
+    print(f"  Images:        {result.images_generated}")
+    print(f"  Visual cost:   ${result.visual_cost_usd:.2f}")
+    print(f"  Visual fails:  {result.visual_failures}")
+    print(f"  CB tripped:    {result.circuit_breaker_tripped}")
     print(f"  Duration:      {result.duration_seconds:.1f}s")
     print("=" * 60)
 
