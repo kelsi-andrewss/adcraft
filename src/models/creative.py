@@ -53,6 +53,14 @@ class ImageResult(BaseModel):
         default_factory=dict,
         description="Generation parameters used (aspect_ratio, resolution, etc.)",
     )
+    variant_group_id: str | None = Field(
+        default=None,
+        description="Shared UUID4 linking all variants from the same ad",
+    )
+    variant_type: str | None = Field(
+        default=None,
+        description="Creative direction type (lifestyle, product, emotional)",
+    )
 
 
 class VisualEvaluationResult(BaseModel):
