@@ -544,6 +544,25 @@ def get_ads_with_images(conn: sqlite3.Connection, *, limit: int = 100) -> list[d
     return [dict(r) for r in rows]
 
 
+def get_image_costs_by_model(conn: sqlite3.Connection) -> list[dict]:
+    """Aggregate image generation costs grouped by model.
+
+    Returns one dict per image model with ad_count, total_cost, avg_cost.
+    Only includes ads that have an image_model set.
+    """
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """SELECT image_model,
+                  COUNT(*) as ad_count,
+                  SUM(image_cost_usd) as total_cost,
+                  AVG(image_cost_usd) as avg_cost
+           FROM ads
+           WHERE image_model IS NOT NULL
+           GROUP BY image_model"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_image_gen_threshold(conn: sqlite3.Connection) -> float:
     """Calculate dynamic image generation threshold.
 
