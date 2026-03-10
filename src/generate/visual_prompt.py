@@ -12,14 +12,10 @@ import os
 
 from google import genai
 from google.genai import types
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from google.genai.errors import APIError
 
 from src.decisions.logger import log_decision
+from src.evaluate.utils import gemini_retry, is_retriable
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 from src.models.creative import VisualBrief
@@ -189,21 +185,12 @@ class VisualPromptGenerator:
 
         return visual_brief
 
+    @gemini_retry
     def _call_gemini(self, prompt: str) -> tuple[dict, int]:
         """Call Gemini with structured output and retry logic.
 
         Returns (parsed_response_dict, total_token_count).
         """
-        return self._call_gemini_with_retry(prompt)
-
-    @retry(
-        retry=retry_if_exception_type((Exception,)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=60),
-        reraise=True,
-    )
-    def _call_gemini_with_retry(self, prompt: str) -> tuple[dict, int]:
-        """Inner call with tenacity retry decorator."""
         try:
             response = self._client.models.generate_content(
                 model=self._model,
@@ -213,12 +200,27 @@ class VisualPromptGenerator:
                     response_json_schema=VISUAL_PROMPT_SCHEMA,
                 ),
             )
+        except APIError as exc:
+            retriable = is_retriable(exc)
+            log_decision(
+                "visual_prompt",
+                "api_retry" if retriable else "api_error",
+                f"Gemini call failed ({exc.code} {exc.status}), "
+                f"{'will retry' if retriable else 'non-retriable'}: {exc}",
+                {
+                    "model": self._model,
+                    "error": str(exc),
+                    "code": exc.code,
+                    "retriable": retriable,
+                },
+            )
+            raise
         except Exception as exc:
             log_decision(
                 "visual_prompt",
-                "api_retry",
-                f"Gemini call failed, will retry: {type(exc).__name__}: {exc}",
-                {"model": self._model, "error": str(exc)},
+                "api_error",
+                f"Gemini call failed (non-API error, will not retry): {type(exc).__name__}: {exc}",
+                {"model": self._model, "error": str(exc), "retriable": False},
             )
             raise
 

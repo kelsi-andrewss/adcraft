@@ -17,12 +17,6 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 from PIL import Image as PILImage
-from tenacity import (
-    retry,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from src.decisions.logger import log_decision
 from src.evaluate.rubrics import (
@@ -35,6 +29,7 @@ from src.evaluate.rubrics import (
     build_all_dimensions_prompt,
     build_single_dimension_prompt,
 )
+from src.evaluate.utils import SAFETY_SETTINGS, gemini_retry, is_retriable
 from src.evaluate.visual_rubrics import (
     VISUAL_ALL_DIMENSIONS_SCHEMA,
     VISUAL_DIMENSIONS,
@@ -46,22 +41,6 @@ from src.models.ad import AdCopy
 from src.models.evaluation import DimensionScore, EvaluationResult
 
 EVALUATOR_MODEL = "gemini-2.5-pro"
-
-# Transient HTTP codes worth retrying — mirrors the SDK's own _RETRY_HTTP_STATUS_CODES
-_RETRIABLE_STATUS_CODES = (408, 429, 500, 502, 503)
-
-
-def _is_retriable(exc: BaseException) -> bool:
-    """Return True for transient API errors that may succeed on retry."""
-    return isinstance(exc, APIError) and exc.code in _RETRIABLE_STATUS_CODES
-
-
-SAFETY_SETTINGS = [
-    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
-    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_ONLY_HIGH"),
-    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_ONLY_HIGH"),
-    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_ONLY_HIGH"),
-]
 
 
 class EvaluationEngine:
@@ -317,21 +296,12 @@ class EvaluationEngine:
             token_count=token_count,
         )
 
+    @gemini_retry
     def _call_gemini(self, prompt: str, schema: dict) -> tuple[dict, int]:
         """Call Gemini with structured output and retry logic.
 
         Returns (parsed_response_dict, total_token_count).
         """
-        return self._call_gemini_with_retry(prompt, schema)
-
-    @retry(
-        retry=retry_if_exception(_is_retriable),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=60),
-        reraise=True,
-    )
-    def _call_gemini_with_retry(self, prompt: str, schema: dict) -> tuple[dict, int]:
-        """Inner call with tenacity retry decorator."""
         try:
             response = self._client.models.generate_content(
                 model=self._model,
@@ -344,7 +314,7 @@ class EvaluationEngine:
                 ),
             )
         except APIError as exc:
-            retriable = _is_retriable(exc)
+            retriable = is_retriable(exc)
             log_decision(
                 "evaluator",
                 "api_retry" if retriable else "api_error",
@@ -375,6 +345,7 @@ class EvaluationEngine:
         parsed = json.loads(response.text)
         return parsed, token_count
 
+    @gemini_retry
     def _call_gemini_multimodal(self, contents: list, schema: dict) -> tuple[dict, int]:
         """Call Gemini with multimodal content list and structured output.
 
@@ -383,16 +354,6 @@ class EvaluationEngine:
 
         Returns (parsed_response_dict, total_token_count).
         """
-        return self._call_gemini_multimodal_with_retry(contents, schema)
-
-    @retry(
-        retry=retry_if_exception(_is_retriable),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=60),
-        reraise=True,
-    )
-    def _call_gemini_multimodal_with_retry(self, contents: list, schema: dict) -> tuple[dict, int]:
-        """Inner multimodal call with tenacity retry decorator."""
         try:
             response = self._client.models.generate_content(
                 model=self._model,
@@ -405,7 +366,7 @@ class EvaluationEngine:
                 ),
             )
         except APIError as exc:
-            retriable = _is_retriable(exc)
+            retriable = is_retriable(exc)
             log_decision(
                 "evaluator",
                 "api_retry" if retriable else "api_error",

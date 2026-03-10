@@ -16,16 +16,12 @@ from pathlib import Path
 
 from google import genai
 from google.genai import types
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from google.genai.errors import APIError
 
 from src.analytics.cost import IMAGE_PRICING
 from src.db.queries import get_image_gen_threshold
 from src.decisions.logger import log_decision
+from src.evaluate.utils import gemini_retry, is_retriable
 from src.models.creative import ImageResult, VisualBrief
 
 FLASH_IMAGE_MODEL = "gemini-2.5-flash-image"
@@ -161,12 +157,7 @@ class ImageGenerationEngine:
                 f"Image generation failed for ad={ad_id} after flash and pro attempts"
             ) from pro_exc
 
-    @retry(
-        retry=retry_if_exception_type((Exception,)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=60),
-        reraise=True,
-    )
+    @gemini_retry
     def _generate_with_model(
         self,
         model: str,
@@ -191,12 +182,29 @@ class ImageGenerationEngine:
                     ),
                 ),
             )
+        except APIError as exc:
+            retriable = is_retriable(exc)
+            log_decision(
+                "image_generator",
+                "api_retry" if retriable else "api_error",
+                f"Image API call failed for model={model} ({exc.code} {exc.status}), "
+                f"{'will retry' if retriable else 'non-retriable'}: {exc}",
+                {
+                    "model": model,
+                    "ad_id": ad_id,
+                    "error": str(exc),
+                    "code": exc.code,
+                    "retriable": retriable,
+                },
+            )
+            raise
         except Exception as exc:
             log_decision(
                 "image_generator",
-                "api_retry",
-                f"Image API call failed for model={model}, will retry: {type(exc).__name__}",
-                {"model": model, "ad_id": ad_id, "error": str(exc)},
+                "api_error",
+                f"Image API call failed for model={model} "
+                f"(non-API error, will not retry): {type(exc).__name__}: {exc}",
+                {"model": model, "ad_id": ad_id, "error": str(exc), "retriable": False},
             )
             raise
 

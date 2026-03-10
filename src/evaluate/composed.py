@@ -16,28 +16,13 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 from PIL import Image as PILImage
-from tenacity import (
-    retry,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from src.decisions.logger import log_decision
+from src.evaluate.utils import SAFETY_SETTINGS, gemini_retry, is_retriable
 from src.models.ad import AdCopy
 
 EVALUATOR_MODEL = "gemini-2.5-pro"
 PUBLISHABLE_THRESHOLD = 7.0
-
-# Transient HTTP codes worth retrying
-_RETRIABLE_STATUS_CODES = (408, 429, 500, 502, 503)
-
-SAFETY_SETTINGS = [
-    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_ONLY_HIGH"),
-    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_ONLY_HIGH"),
-    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_ONLY_HIGH"),
-    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_ONLY_HIGH"),
-]
 
 COMPOSED_EVAL_PROMPT = (
     "You are an expert advertising creative director evaluating a complete\n"
@@ -123,11 +108,6 @@ COMPOSED_EVAL_SCHEMA: dict = {
 }
 
 
-def _is_retriable(exc: BaseException) -> bool:
-    """Return True for transient API errors that may succeed on retry."""
-    return isinstance(exc, APIError) and exc.code in _RETRIABLE_STATUS_CODES
-
-
 class ComposedEvaluator:
     """Scores the complete ad unit (copy + image) as a single publishable piece."""
 
@@ -204,21 +184,12 @@ class ComposedEvaluator:
     # Internal
     # ------------------------------------------------------------------
 
+    @gemini_retry
     def _call_gemini_multimodal(self, contents: list, schema: dict) -> tuple[dict, int]:
         """Call Gemini with multimodal content and structured output.
 
         Returns (parsed_response_dict, total_token_count).
         """
-        return self._call_gemini_multimodal_with_retry(contents, schema)
-
-    @retry(
-        retry=retry_if_exception(_is_retriable),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=60),
-        reraise=True,
-    )
-    def _call_gemini_multimodal_with_retry(self, contents: list, schema: dict) -> tuple[dict, int]:
-        """Inner multimodal call with tenacity retry decorator."""
         try:
             response = self._client.models.generate_content(
                 model=self._model,
@@ -231,7 +202,7 @@ class ComposedEvaluator:
                 ),
             )
         except APIError as exc:
-            retriable = _is_retriable(exc)
+            retriable = is_retriable(exc)
             log_decision(
                 "composed_evaluator",
                 "api_retry" if retriable else "api_error",
