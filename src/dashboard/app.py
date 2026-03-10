@@ -709,7 +709,7 @@ with tab_gallery:
         with fcol4:
             sort_option = st.selectbox(
                 "Sort by",
-                ["Visual Score", "Composed Score", "Cost", "Newest"],
+                ["Visual Score", "Cost", "Newest"],
                 key="gallery_sort",
             )
 
@@ -747,14 +747,12 @@ with tab_gallery:
             evals = ad_evals_map.get(ad["id"], [])
             if sort_option == "Visual Score":
                 return _visual_avg(evals) or 0.0
-            elif sort_option == "Composed Score":
-                return _compute_weighted_score(evals) or 0.0
             elif sort_option == "Cost":
                 return ad.get("image_cost_usd") or 0.0
             else:  # Newest — already sorted by created_at DESC from query
                 return 0.0
 
-        if sort_option in ("Visual Score", "Composed Score"):
+        if sort_option == "Visual Score":
             filtered_ads.sort(key=_sort_key, reverse=True)
         elif sort_option == "Cost":
             filtered_ads.sort(key=_sort_key, reverse=False)

@@ -61,25 +61,3 @@ class ImageResult(BaseModel):
         default=None,
         description="Creative direction type (lifestyle, product, emotional)",
     )
-
-
-class VisualEvaluationResult(BaseModel):
-    """Visual evaluation scores from multimodal LLM-as-judge.
-
-    Three dimensions scored independently by Gemini 2.5 Pro with
-    image + copy + rubric in a single multimodal call.
-    """
-
-    brand_consistency_score: float = Field(
-        description="Brand adherence: color palette, typography, visual tone (0-10)"
-    )
-    composition_score: float = Field(
-        description="Layout, focal point, visual hierarchy quality (0-10)"
-    )
-    synergy_score: float = Field(
-        description="Text-image coherence: does image reinforce the copy? (0-10)"
-    )
-    rationales: dict[str, str] = Field(
-        description="Per-dimension rationale keyed by dimension name"
-    )
-    overall_visual_score: float = Field(description="Weighted overall visual quality score (0-10)")
