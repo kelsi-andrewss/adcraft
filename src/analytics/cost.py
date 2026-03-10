@@ -18,6 +18,14 @@ FALLBACK_PRICING: dict[str, tuple[float, float]] = {
     "claude-sonnet-4-6": (3.00, 15.00),
 }
 
+# Flat rate per image at 1K resolution (not per-token — separate from FALLBACK_PRICING)
+IMAGE_PRICING: dict[str, float] = {
+    "gemini-2.5-flash-image": 0.039,
+    "gemini-3-pro-image-preview": 0.08,
+    "imagen-4.0-generate-001": 0.04,
+    "imagen-4.0-fast-generate-001": 0.02,
+}
+
 PASS_THRESHOLD = 7.0
 
 
@@ -53,6 +61,24 @@ def calculate_cost(model_id: str, input_tokens: int, output_tokens: int) -> floa
     input_price, output_price = pricing
     cost = (input_tokens * input_price / 1_000_000) + (output_tokens * output_price / 1_000_000)
     return cost
+
+
+def calculate_image_cost(model_id: str) -> float:
+    """Return the flat-rate USD cost for one image generation call.
+
+    Looks up the model in IMAGE_PRICING. Logs a decision and returns 0.0
+    for unknown models (same pattern as calculate_cost fallback).
+    """
+    price = IMAGE_PRICING.get(model_id)
+    if price is None:
+        log_decision(
+            "cost",
+            "unknown_image_model_pricing",
+            f"No image pricing data for model '{model_id}', returning 0.0",
+            {"model_id": model_id},
+        )
+        return 0.0
+    return price
 
 
 def record_api_cost(
@@ -103,7 +129,13 @@ def compute_quality_snapshot(db_conn: sqlite3.Connection, cycle_number: int) -> 
     db_conn.row_factory = sqlite3.Row
 
     # Get all ads (cycle filtering relies on iteration records if available)
-    ads_rows = db_conn.execute("SELECT id, cost_usd FROM ads").fetchall()
+    # Include image_cost_usd; fall back to without it for pre-migration DBs
+    try:
+        ads_rows = db_conn.execute("SELECT id, cost_usd, image_cost_usd FROM ads").fetchall()
+        _has_image_col = True
+    except sqlite3.OperationalError:
+        ads_rows = db_conn.execute("SELECT id, cost_usd FROM ads").fetchall()
+        _has_image_col = False
     total_ads = len(ads_rows)
     ad_ids = [r["id"] for r in ads_rows]
 
@@ -120,12 +152,13 @@ def compute_quality_snapshot(db_conn: sqlite3.Connection, cycle_number: int) -> 
         queries.insert_quality_snapshot(db_conn, **snapshot)
         return snapshot
 
-    # Calculate token spend from ads and evaluations
+    # Calculate token spend from ads (copy + image) and evaluations
     ad_spend = sum(r["cost_usd"] or 0.0 for r in ads_rows)
+    image_spend = sum(r["image_cost_usd"] or 0.0 for r in ads_rows) if _has_image_col else 0.0
     eval_spend_row = db_conn.execute(
         "SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM evaluations"
     ).fetchone()
-    token_spend_usd = ad_spend + (eval_spend_row["total"] if eval_spend_row else 0.0)
+    token_spend_usd = ad_spend + image_spend + (eval_spend_row["total"] if eval_spend_row else 0.0)
 
     # Calculate dimension averages from final-mode evaluations (or all if no final)
     eval_rows = db_conn.execute(
@@ -196,3 +229,127 @@ def compute_quality_snapshot(db_conn: sqlite3.Connection, cycle_number: int) -> 
 def get_performance_per_token(db_conn: sqlite3.Connection) -> list[dict]:
     """Return all quality snapshots ordered by cycle for trend display."""
     return queries.list_quality_snapshots(db_conn)
+
+
+def compute_creative_unit_cost(db_conn: sqlite3.Connection, ad_id: str) -> dict:
+    """Calculate the full cost breakdown for one creative unit (ad).
+
+    Sums copy generation cost, image generation cost, and all evaluation
+    costs for the given ad. Returns 0.0 for any NULL cost fields.
+    """
+    db_conn.row_factory = sqlite3.Row
+
+    ad_row = db_conn.execute(
+        """SELECT id, cost_usd, image_cost_usd, image_model, image_path
+           FROM ads WHERE id = ?""",
+        (ad_id,),
+    ).fetchone()
+
+    if ad_row is None:
+        log_decision(
+            "cost",
+            "creative_unit_cost_not_found",
+            f"No ad found with id '{ad_id}'",
+            {"ad_id": ad_id},
+            conn=db_conn,
+        )
+        return {
+            "ad_id": ad_id,
+            "copy_gen_cost": 0.0,
+            "image_gen_cost": 0.0,
+            "eval_cost": 0.0,
+            "total_cost": 0.0,
+            "image_model": None,
+            "has_image": False,
+        }
+
+    copy_gen_cost = ad_row["cost_usd"] or 0.0
+    image_gen_cost = ad_row["image_cost_usd"] or 0.0
+
+    eval_row = db_conn.execute(
+        "SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM evaluations WHERE ad_id = ?",
+        (ad_id,),
+    ).fetchone()
+    eval_cost = eval_row["total"] if eval_row else 0.0
+
+    total_cost = copy_gen_cost + image_gen_cost + eval_cost
+    has_image = image_gen_cost > 0 or ad_row["image_path"] is not None
+
+    breakdown = {
+        "ad_id": ad_id,
+        "copy_gen_cost": copy_gen_cost,
+        "image_gen_cost": image_gen_cost,
+        "eval_cost": eval_cost,
+        "total_cost": total_cost,
+        "image_model": ad_row["image_model"],
+        "has_image": has_image,
+    }
+
+    log_decision(
+        "cost",
+        "creative_unit_cost",
+        f"Ad {ad_id}: copy=${copy_gen_cost:.4f} + image=${image_gen_cost:.4f} "
+        f"+ eval=${eval_cost:.4f} = total=${total_cost:.4f}",
+        breakdown,
+        conn=db_conn,
+    )
+
+    return breakdown
+
+
+def compare_image_model_efficiency(db_conn: sqlite3.Connection) -> list[dict]:
+    """Compare quality-per-dollar across image generation models.
+
+    For each model that has generated at least one image, returns cost
+    aggregates and average visual evaluation scores (brand_consistency,
+    composition_quality, text_image_synergy).
+    """
+    model_costs = queries.get_image_costs_by_model(db_conn)
+    if not model_costs:
+        return []
+
+    # Visual evaluation dimensions stored in evaluations table
+    visual_dims = ("brand_consistency", "composition_quality", "text_image_synergy")
+
+    results = []
+    for mc in model_costs:
+        model = mc["image_model"]
+
+        # Average visual scores for ads generated by this model
+        db_conn.row_factory = sqlite3.Row
+        score_row = db_conn.execute(
+            f"""SELECT AVG(e.score) as avg_visual_score
+                FROM evaluations e
+                JOIN ads a ON a.id = e.ad_id
+                WHERE a.image_model = ?
+                  AND e.dimension IN ({",".join("?" for _ in visual_dims)})""",
+            (model, *visual_dims),
+        ).fetchone()
+
+        avg_visual_score = score_row["avg_visual_score"] if score_row else None
+        avg_image_cost = mc["avg_cost"] or 0.0
+
+        quality_per_dollar = None
+        if avg_visual_score is not None and avg_image_cost > 0:
+            quality_per_dollar = avg_visual_score / avg_image_cost
+
+        results.append(
+            {
+                "image_model": model,
+                "ad_count": mc["ad_count"],
+                "total_image_cost": mc["total_cost"] or 0.0,
+                "avg_image_cost": avg_image_cost,
+                "avg_visual_score": avg_visual_score,
+                "quality_per_dollar": quality_per_dollar,
+            }
+        )
+
+    log_decision(
+        "cost",
+        "image_model_efficiency_comparison",
+        f"Compared {len(results)} image models by quality-per-dollar",
+        {"models": results},
+        conn=db_conn,
+    )
+
+    return results
