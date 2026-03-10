@@ -240,31 +240,24 @@ with tab_library:
         if rows:
             st.caption(f"Showing {len(rows)} of {total_ads} ads")
 
-            # Dataframe overview
-            df = pd.DataFrame(rows)[
-                ["id", "headline", "primary_text", "cta", "score", "status", "created"]
-            ]
-            st.dataframe(
-                df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "id": st.column_config.TextColumn("ID", width="small"),
-                    "headline": st.column_config.TextColumn("Headline", width="medium"),
-                    "primary_text": st.column_config.TextColumn("Primary Text", width="large"),
-                    "cta": st.column_config.TextColumn("CTA", width="small"),
-                    "score": st.column_config.NumberColumn("Score", format="%.2f", width="small"),
-                    "status": st.column_config.TextColumn("Status", width="small"),
-                    "created": st.column_config.TextColumn("Created", width="medium"),
-                },
-            )
-
             # Expanders for detail
             for row in rows:
                 ad_data = row["_ad"]
                 evals_data = row["_evals"]
-                with st.expander(f"{row['headline']} — {row['status']} ({row['score']})"):
-                    dcol1, dcol2 = st.columns(2)
+                img_path = ad_data.get("image_path", "")
+                has_image = img_path and Path(img_path).exists()
+                img_icon = "\U0001f5bc\ufe0f " if has_image else ""
+                with st.expander(
+                    f"{img_icon}{row['headline']} — {row['status']} ({row['score']})"
+                ):
+                    if has_image:
+                        img_col, dcol1, dcol2 = st.columns([1, 1, 1])
+                        with img_col:
+                            st.image(img_path, use_container_width=True)
+                            if ad_data.get("image_model"):
+                                st.caption(f"Model: {ad_data['image_model']}")
+                    else:
+                        dcol1, dcol2 = st.columns(2)
                     with dcol1:
                         st.subheader("Ad Copy")
                         st.markdown(f"**Headline:** {ad_data.get('headline', '')}")
