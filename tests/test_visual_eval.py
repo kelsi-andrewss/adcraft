@@ -20,6 +20,7 @@ from src.evaluate.visual_rubrics import (
     build_visual_single_dimension_prompt,
 )
 from src.models.ad import AdCopy
+from src.theme import THEME
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -37,7 +38,7 @@ def test_ad_copy() -> AdCopy:
     return AdCopy(
         id="visual-test-001",
         primary_text="Unlock your child's potential with expert SAT tutoring.",
-        headline="Score Higher with Varsity Tutors",
+        headline="Score Higher with Nerdy",
         description="Personalized 1-on-1 SAT prep from expert tutors.",
         cta_button="Book a Free Session",
     )
@@ -247,3 +248,45 @@ def test_multimodal_content_list_structure(mock_log, test_image, test_ad_copy):
     assert "Headline:" in contents[2]
     assert "Primary text:" in contents[2]
     assert "CTA:" in contents[2]
+
+
+# ---------------------------------------------------------------------------
+# Tests: brand theme assertions
+# ---------------------------------------------------------------------------
+
+
+def test_brand_consistency_rubric_contains_theme_brand():
+    """brand_consistency rubric references THEME.brand_name, not Varsity Tutors."""
+    from src.evaluate.visual_rubrics import VISUAL_RUBRICS
+
+    rubric = VISUAL_RUBRICS["brand_consistency"]
+    assert THEME.brand_name in rubric
+    assert "Varsity Tutors" not in rubric
+    assert THEME.primary_color in rubric
+    assert "#003057" not in rubric
+    assert "#00B4D8" not in rubric
+
+
+def test_single_dimension_prompt_contains_theme_brand():
+    """Single-dimension prompt references THEME.brand_name."""
+    prompt = build_visual_single_dimension_prompt("brand_consistency")
+    assert THEME.brand_name in prompt
+    assert "Varsity Tutors" not in prompt
+
+
+def test_all_dimensions_prompt_contains_theme_brand():
+    """All-dimensions prompt references THEME.brand_name."""
+    prompt = build_visual_all_dimensions_prompt()
+    assert THEME.brand_name in prompt
+    assert "Varsity Tutors" not in prompt
+
+
+def test_few_shot_examples_reference_nerdy_palette():
+    """Few-shot brand_consistency examples reference Nerdy palette."""
+    from src.evaluate.visual_rubrics import VISUAL_FEW_SHOT_EXAMPLES
+
+    examples = VISUAL_FEW_SHOT_EXAMPLES["brand_consistency"]
+    assert THEME.brand_name in examples
+    assert "Varsity Tutors" not in examples
+    assert "cyan" in examples.lower()
+    assert "dark navy" in examples.lower()
