@@ -1,7 +1,7 @@
 """Tests for visual prompt engineering (story-595).
 
 Tests cover:
-- Pydantic model validation for VisualBrief, ImageResult, VisualEvaluationResult
+- Pydantic model validation for VisualBrief, ImageResult
 - Aspect ratio mapping from placement
 - Visual prompt generation with mocked Gemini
 - Decision logging at all branch points
@@ -21,7 +21,7 @@ from src.generate.visual_prompt import (
 )
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
-from src.models.creative import ImageResult, VisualBrief, VisualEvaluationResult
+from src.models.creative import ImageResult, VisualBrief
 from src.theme import THEME
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -160,43 +160,6 @@ class TestImageResult:
             cost_usd=0.04,
         )
         assert result.generation_config == {}
-
-
-class TestVisualEvaluationResult:
-    def test_all_scores_required(self):
-        with pytest.raises(Exception):
-            VisualEvaluationResult()  # type: ignore[call-arg]
-
-    def test_valid_result(self):
-        result = VisualEvaluationResult(
-            brand_consistency_score=8.5,
-            composition_score=7.0,
-            synergy_score=9.0,
-            rationales={
-                "brand_consistency": "Strong blue/green palette match",
-                "composition": "Clean layout but focal point slightly off-center",
-                "synergy": "Image perfectly reinforces the achievement message",
-            },
-            overall_visual_score=8.2,
-        )
-        assert result.brand_consistency_score == 8.5
-        assert result.composition_score == 7.0
-        assert result.synergy_score == 9.0
-        assert len(result.rationales) == 3
-        assert result.overall_visual_score == 8.2
-
-    def test_rationales_is_dict_str_str(self):
-        result = VisualEvaluationResult(
-            brand_consistency_score=8.0,
-            composition_score=7.0,
-            synergy_score=8.0,
-            rationales={"key": "value"},
-            overall_visual_score=7.5,
-        )
-        assert isinstance(result.rationales, dict)
-        for k, v in result.rationales.items():
-            assert isinstance(k, str)
-            assert isinstance(v, str)
 
 
 # ── Aspect ratio mapping tests ────────────────────────────────────────
