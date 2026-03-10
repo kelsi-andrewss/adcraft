@@ -822,7 +822,6 @@ with tab_gallery:
                                 vs_cols[di].metric(
                                     dim.replace("_", " ").title(),
                                     f"{dim_score:.1f}" if dim_score is not None else "N/A",
-                                    key=f"vg_{vg_id}_{vi}_{dim}",
                                 )
 
         # =============================================================
@@ -874,7 +873,6 @@ with tab_gallery:
                                 score_cols[di].metric(
                                     dim.replace("_", " ").title(),
                                     f"{dim_score:.1f}" if dim_score is not None else "N/A",
-                                    key=f"card_{ad['id'][:8]}_{ci}_{dim}",
                                 )
 
                         # Overall visual average
