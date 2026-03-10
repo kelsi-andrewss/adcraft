@@ -576,7 +576,7 @@ with tab_cost:
             "Dual-axis chart: quality-per-dollar ratio (left axis) and "
             "cumulative token spend (right axis) across pipeline cycles."
         )
-        st.plotly_chart(cost_efficiency_trend(conn), use_container_width=True)
+        st.plotly_chart(cost_efficiency_trend(conn), use_container_width=True, key="cost_efficiency_costs_tab")
 
 # ---- Tab 6: Pipeline Runner -----------------------------------------------
 
