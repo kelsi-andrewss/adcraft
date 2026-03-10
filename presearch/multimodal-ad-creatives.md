@@ -20,11 +20,13 @@ Add image generation to AdCraft using Gemini's native image generation (Nano Ban
 
 17. **Visual Evaluation Dimensions** — Extend the evaluation framework with 3 new visual dimensions scored independently: **Brand Consistency** (color palette, typography style, visual tone match), **Composition Quality** (layout, focal point, visual hierarchy), **Text-Image Synergy** (does the image reinforce the copy's message and emotional hook?). Multimodal evaluation via Gemini 2.5 Pro with image + copy + rubric in a single call. (`src/evaluate/visual_rubrics.py`, `src/evaluate/engine.py`)
 
-18. **Composed Ad Evaluation** — Final evaluation stage that scores the complete ad unit (copy + image together) for overall coherence and publishability. Separate from individual text and visual scoring. Uses Gemini 2.5 Pro multimodal with the full ad mockup context. (`src/evaluate/composed.py`)
+18. **A/B Visual Variant Generation** — For each ad that qualifies for image gen, generate 2-3 visual variants with different creative approaches (e.g., lifestyle photo vs. product-focused vs. abstract/emotional). Each variant runs through the escalation ladder independently (flash-image first, pro on failure). Best-scoring variant advances to composed eval. Variant group tracked via `variant_group_id` in schema. (`src/generate/variants.py`)
 
-19. **Image Gallery Dashboard Tab** — New Streamlit tab showing generated images alongside their copy, visual prompts, and evaluation scores. Filter by visual score, brand consistency score, image model used. Click to view full evaluation details. (`src/dashboard/app.py` — new tab)
+19. **Composed Ad Evaluation** — Final evaluation stage that scores the complete ad unit (copy + image together) for overall coherence and publishability. Separate from individual text and visual scoring. Uses Gemini 2.5 Pro multimodal with the full ad mockup context. (`src/evaluate/composed.py`)
 
-20. **Visual Cost Tracking** — Extend performance-per-token to include image generation costs. Track cost per creative unit (copy generation + image generation + all evaluations). Compare cost-efficiency across image models (flash-image vs. pro-image-preview vs. imagen-4). (`src/analytics/cost.py`, `src/db/queries.py`)
+20. **Image Gallery Dashboard Tab** — New Streamlit tab showing generated images alongside their copy, visual prompts, and evaluation scores. Side-by-side comparison for A/B variants. Filter by visual score, brand consistency score, image model used. Click to view full evaluation details. (`src/dashboard/app.py` — new tab)
+
+21. **Visual Cost Tracking** — Extend performance-per-token to include image generation costs. Track cost per creative unit (copy generation + image generation + all evaluations). Compare cost-efficiency across image models (flash-image vs. pro-image-preview vs. imagen-4). (`src/analytics/cost.py`, `src/db/queries.py`)
 
 ### Cut
 - **Flux/Replicate integration** — Adds a new dependency and billing surface for marginal quality gain. Gemini native covers our needs. Revisit only if Gemini image quality proves insufficient.
@@ -109,13 +111,14 @@ Add image generation to AdCraft using Gemini's native image generation (Nano Ban
 **Pipeline Extension (Quality Escalation Ladder):**
 ```
 Brief → Generate Copy → Evaluate Copy → [copy score >= dynamic threshold?]
-  → Yes → Generate Visual Prompt → Flash-Image generates → Evaluate Visual
-    → [visual passes?]
-      → Yes → Composed Eval → Store in library
-      → No → Pro-Image regenerates (1 retry) → Re-evaluate
-        → [passes now?]
-          → Yes → Composed Eval → Store
-          → No → Force-fail, log reason
+  → Yes → Generate Visual Prompt → Generate 2-3 Variants via Escalation Ladder:
+    → For each variant:
+      → Flash-Image generates → Evaluate Visual
+        → [visual passes?]
+          → Yes → candidate
+          → No → Pro-Image retry (1 shot) → Re-evaluate
+            → [passes?] → Yes: candidate / No: discard
+    → Best-scoring variant → Composed Eval → Store in library
   → No (score 7.0-threshold) → Store as text-only ad (still publishable)
   → No (score < 7.0) → Iterate copy (existing flow)
 ```
@@ -145,6 +148,8 @@ ALTER TABLE ads ADD COLUMN image_path TEXT;
 ALTER TABLE ads ADD COLUMN visual_prompt TEXT;
 ALTER TABLE ads ADD COLUMN image_model TEXT;
 ALTER TABLE ads ADD COLUMN image_cost_usd REAL;
+ALTER TABLE ads ADD COLUMN variant_group_id TEXT;
+ALTER TABLE ads ADD COLUMN variant_type TEXT;
 ```
 
 **New evaluation dimensions** (stored in existing `evaluations` table):
@@ -157,12 +162,12 @@ No new tables needed. The existing `evaluations` table handles visual dimensions
 ### Shared Interfaces
 
 New file: `src/models/creative.py`:
-- `VisualBrief` — prompt, negative_prompt, aspect_ratio, resolution, style_refs[], placement (used by features: 15, 16)
-- `ImageResult` — image_bytes, file_path, model_id, cost_usd, generation_config (used by features: 16, 19, 20)
-- `VisualEvaluationResult` — brand_consistency_score, composition_score, synergy_score, rationales, overall_visual_score (used by features: 17, 18, 19)
+- `VisualBrief` — prompt, negative_prompt, aspect_ratio, resolution, style_refs[], placement (used by features: 15, 16, 18)
+- `ImageResult` — image_bytes, file_path, model_id, cost_usd, generation_config (used by features: 16, 18, 20, 21)
+- `VisualEvaluationResult` — brand_consistency_score, composition_score, synergy_score, rationales, overall_visual_score (used by features: 17, 18, 19, 20)
 
 Modified: `src/models/ad.py`:
-- `AdCopy` gains: `image_path`, `visual_prompt`, `image_model`, `image_cost_usd` (used by features: 16, 19, 20)
+- `AdCopy` gains: `image_path`, `visual_prompt`, `image_model`, `image_cost_usd`, `variant_group_id`, `variant_type` (used by features: 16, 18, 20, 21)
 
 Modified: `src/models/evaluation.py`:
 - `EvaluationResult` used as-is — visual dimensions are just new `DimensionScore` entries
@@ -205,15 +210,16 @@ Modified: `src/models/evaluation.py`:
 | 15. Visual Prompt Engineering | M | Prompt design is the hard part — must capture brand constraints |
 | 16. Image Generation Engine | M | Two model integrations (Gemini native + Imagen 4 fallback) |
 | 17. Visual Evaluation Dimensions | M | New rubrics, calibration against reference images |
-| 18. Composed Ad Evaluation | S | Single multimodal eval call, scoring logic |
-| 19. Image Gallery Dashboard | M | New Streamlit tab with image display, comparison view |
-| 20. Visual Cost Tracking | S | Extend existing cost tracking with image costs |
+| 18. A/B Variant Generation | S | Variant branching logic, variant_group tracking |
+| 19. Composed Ad Evaluation | S | Single multimodal eval call, scoring logic |
+| 20. Image Gallery Dashboard | M | New Streamlit tab with image display, comparison view |
+| 21. Visual Cost Tracking | S | Extend existing cost tracking with image costs |
 
 **Operational costs per pipeline run (50 ads, free tier):**
 | Component | Est. Cost |
 |-----------|-----------|
 | Visual prompt gen (Gemini 2.5 Flash) | $0 (free tier) |
-| Flash-image gen (~35-40 qualifying ads) | $0 (free tier, 500 RPD) |
+| Flash-image gen (~35-40 ads × 2-3 variants) | $0 (free tier, 500 RPD) |
 | Pro-image retry (~8-10 flash failures) | ~$0.30-0.40 |
 | Visual evaluation (Gemini 2.5 Pro) | ~$0.50-1.00 |
 | Composed evaluation (Gemini 2.5 Pro) | ~$0.25-0.50 |
@@ -237,6 +243,7 @@ Modified: `src/models/evaluation.py`:
 
 - **Quality escalation ladder**: flash-image first (free tier), pro-image only on visual eval failure — performance-per-token applied to image gen itself
 - **Dynamic image gen threshold**: starts at 7.0, ratchets up with running average — demonstrates v3 quality ratchet in image pipeline
+- **A/B visual variants**: 2-3 creative approaches per qualifying ad — each runs through escalation ladder independently, best variant advances
 - **Fallback**: Imagen 4 via same SDK — different API method but no new deps
 - **Skip Flux/Replicate**: adds dependency + billing surface for marginal gain. Revisit if Gemini quality insufficient
 - **Visual evaluation**: Gemini 2.5 Pro multimodal — already our evaluator, handles image+text natively
