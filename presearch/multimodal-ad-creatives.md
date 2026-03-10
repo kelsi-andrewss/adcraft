@@ -28,6 +28,8 @@ Add image generation to AdCraft using Gemini's native image generation (Nano Ban
 
 21. **Visual Cost Tracking** — Extend performance-per-token to include image generation costs. Track cost per creative unit (copy generation + image generation + all evaluations). Compare cost-efficiency across image models (flash-image vs. pro-image-preview vs. imagen-4). (`src/analytics/cost.py`, `src/db/queries.py`)
 
+22. **Visual Pipeline Circuit Breaker** — Three-tier failure handling for image gen. Tier 1 (per-variant): 1 retry only — flash-image fails, escalate to pro-image, if pro fails too, discard that variant. Tier 2 (per-ad): if all 2-3 variants for an ad fail visual eval, stop generating — store as text-only ad and log the failure reason. Tier 3 (per-batch): if >50% of ads in a batch fail visual eval across all variants, halt image gen entirely, log a decision entry ("visual prompt template or rubric appears broken"), and surface the alert in the dashboard. Prevents silent waste of free tier quota against a broken prompt template. (`src/iterate/visual_healing.py`, `src/decisions/logger.py`)
+
 ### Cut
 - **Flux/Replicate integration** — Adds a new dependency and billing surface for marginal quality gain. Gemini native covers our needs. Revisit only if Gemini image quality proves insufficient.
 - **4K resolution** — Overkill for FB/IG ads. 1K is standard, 2K for high-quality finals.
@@ -117,10 +119,14 @@ Brief → Generate Copy → Evaluate Copy → [copy score >= dynamic threshold?]
         → [visual passes?]
           → Yes → candidate
           → No → Pro-Image retry (1 shot) → Re-evaluate
-            → [passes?] → Yes: candidate / No: discard
-    → Best-scoring variant → Composed Eval → Store in library
+            → [passes?] → Yes: candidate / No: discard variant
+    → [any candidates?]
+      → Yes → Best-scoring variant → Composed Eval → Store in library
+      → No → Store as text-only ad, log failure reason
   → No (score 7.0-threshold) → Store as text-only ad (still publishable)
   → No (score < 7.0) → Iterate copy (existing flow)
+
+Circuit breaker: if >50% of batch ads fail all variants, halt image gen + log decision
 ```
 
 **Dynamic threshold**: starts at 7.0 (same as text publishable gate). After each batch, recalculates as max(7.0, running_weighted_avg - 0.5). This means as average quality rises, the bar for image gen rises too. By batch 3+, only top-performing copy gets images.
@@ -132,6 +138,7 @@ Brief → Generate Copy → Evaluate Copy → [copy score >= dynamic threshold?]
 - Quality escalation: flash-image first (free), pro-image only on visual eval failure. Most images cost $0.
 - Dynamic threshold gates image gen: starts at 7.0, ratchets up with quality. Demonstrates the v3 quality ratchet applied to image gen entry.
 - Visual iteration is simpler than copy iteration: regenerate the image with a modified prompt rather than component-level fixes.
+- Three-tier failure caps: per-variant (1 retry), per-ad (all variants fail → text-only), per-batch (>50% fail → halt + log). Prevents silent quota waste and surfaces systemic issues.
 
 ### Patterns
 - **Image storage**: Local filesystem at `data/images/{ad_id}_{variant}.png`. Path stored in SQLite, not bytes.
@@ -164,7 +171,7 @@ No new tables needed. The existing `evaluations` table handles visual dimensions
 New file: `src/models/creative.py`:
 - `VisualBrief` — prompt, negative_prompt, aspect_ratio, resolution, style_refs[], placement (used by features: 15, 16, 18)
 - `ImageResult` — image_bytes, file_path, model_id, cost_usd, generation_config (used by features: 16, 18, 20, 21)
-- `VisualEvaluationResult` — brand_consistency_score, composition_score, synergy_score, rationales, overall_visual_score (used by features: 17, 18, 19, 20)
+- `VisualEvaluationResult` — brand_consistency_score, composition_score, synergy_score, rationales, overall_visual_score (used by features: 17, 18, 19, 20, 22)
 
 Modified: `src/models/ad.py`:
 - `AdCopy` gains: `image_path`, `visual_prompt`, `image_model`, `image_cost_usd`, `variant_group_id`, `variant_type` (used by features: 16, 18, 20, 21)
@@ -191,6 +198,7 @@ Modified: `src/models/evaluation.py`:
 5. **Gemini native image gen returns TEXT + IMAGE.** The response contains both modalities. Must iterate `response.candidates[0].content.parts` and check for `inline_data` to extract the image bytes.
 6. **Imagen 4 vs Gemini native are different APIs.** Gemini native uses `generate_content()` with `response_modalities=['TEXT', 'IMAGE']`. Imagen 4 uses `generate_images()`. Different methods, different response shapes.
 7. **Pillow dependency.** The google-genai SDK accepts PIL.Image objects directly. Pillow must be installed for this to work.
+8. **Circuit breaker threshold tuning.** The 50% batch failure threshold is a starting guess. Too low and it halts on normal variation. Too high and it lets broken prompts waste quota. Log the actual failure rate per batch and adjust based on observed data.
 
 ### Risks
 
@@ -214,6 +222,7 @@ Modified: `src/models/evaluation.py`:
 | 19. Composed Ad Evaluation | S | Single multimodal eval call, scoring logic |
 | 20. Image Gallery Dashboard | M | New Streamlit tab with image display, comparison view |
 | 21. Visual Cost Tracking | S | Extend existing cost tracking with image costs |
+| 22. Visual Pipeline Circuit Breaker | S | Three-tier failure handling, dashboard alert |
 
 **Operational costs per pipeline run (50 ads, free tier):**
 | Component | Est. Cost |
@@ -244,6 +253,7 @@ Modified: `src/models/evaluation.py`:
 - **Quality escalation ladder**: flash-image first (free tier), pro-image only on visual eval failure — performance-per-token applied to image gen itself
 - **Dynamic image gen threshold**: starts at 7.0, ratchets up with running average — demonstrates v3 quality ratchet in image pipeline
 - **A/B visual variants**: 2-3 creative approaches per qualifying ad — each runs through escalation ladder independently, best variant advances
+- **Three-tier circuit breaker**: per-variant retry cap, per-ad fallback to text-only, per-batch halt at >50% failure rate — "does the system know when it's failing?" is 20% of the rubric
 - **Fallback**: Imagen 4 via same SDK — different API method but no new deps
 - **Skip Flux/Replicate**: adds dependency + billing surface for marginal gain. Revisit if Gemini quality insufficient
 - **Visual evaluation**: Gemini 2.5 Pro multimodal — already our evaluator, handles image+text natively
