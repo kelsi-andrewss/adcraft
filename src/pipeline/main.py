@@ -18,6 +18,10 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from PIL import Image as PILImage
 
 from src.briefs.seed_briefs import get_seed_briefs
