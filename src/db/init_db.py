@@ -11,6 +11,29 @@ def ensure_data_dir(db_path: str | Path) -> Path:
     return path
 
 
+def run_migrations(conn: sqlite3.Connection) -> None:
+    """Run idempotent schema migrations for columns added after initial schema."""
+    _migrate_image_columns(conn)
+
+
+def _migrate_image_columns(conn: sqlite3.Connection) -> None:
+    """Add image-related columns to ads table (story-596)."""
+    columns = [
+        ("image_path", "TEXT"),
+        ("visual_prompt", "TEXT"),
+        ("image_model", "TEXT"),
+        ("image_cost_usd", "REAL"),
+        ("variant_group_id", "TEXT"),
+        ("variant_type", "TEXT"),
+    ]
+    for col_name, col_type in columns:
+        try:
+            conn.execute(f"ALTER TABLE ads ADD COLUMN {col_name} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+    conn.commit()
+
+
 def init_db(db_path: str | Path = "data/ads.db") -> sqlite3.Connection:
     """Initialize the SQLite database with the AdCraft schema.
 
@@ -29,5 +52,7 @@ def init_db(db_path: str | Path = "data/ads.db") -> sqlite3.Connection:
     schema_path = Path(__file__).parent / "schema.sql"
     schema_sql = schema_path.read_text()
     conn.executescript(schema_sql)
+
+    run_migrations(conn)
 
     return conn

@@ -497,3 +497,63 @@ def list_calibration_runs(conn: sqlite3.Connection, *, limit: int = 20) -> list[
             d["details_json"] = json.loads(d["details_json"])
         results.append(d)
     return results
+
+
+# ---------------------------------------------------------------------------
+# images
+# ---------------------------------------------------------------------------
+
+
+def update_ad_image(
+    conn: sqlite3.Connection,
+    ad_id: str,
+    *,
+    image_path: str,
+    visual_prompt: str,
+    image_model: str,
+    image_cost_usd: float,
+    variant_group_id: str | None = None,
+    variant_type: str | None = None,
+) -> None:
+    """Update an ad row with image generation results."""
+    conn.execute(
+        """UPDATE ads
+           SET image_path = ?, visual_prompt = ?, image_model = ?,
+               image_cost_usd = ?, variant_group_id = ?, variant_type = ?
+           WHERE id = ?""",
+        (
+            image_path,
+            visual_prompt,
+            image_model,
+            image_cost_usd,
+            variant_group_id,
+            variant_type,
+            ad_id,
+        ),
+    )
+    conn.commit()
+
+
+def get_ads_with_images(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict]:
+    """List ads that have generated images, ordered by creation time."""
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM ads WHERE image_path IS NOT NULL ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_image_gen_threshold(conn: sqlite3.Connection) -> float:
+    """Calculate dynamic image generation threshold.
+
+    Returns max(7.0, running_weighted_avg - 0.5) from the most recent
+    quality snapshot. Falls back to 7.0 if no snapshots exist.
+    """
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT avg_weighted_score FROM quality_snapshots ORDER BY cycle_number DESC LIMIT 1"
+    ).fetchone()
+    if row is None or row["avg_weighted_score"] is None:
+        return 7.0
+    return max(7.0, row["avg_weighted_score"] - 0.5)
