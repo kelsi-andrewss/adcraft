@@ -76,9 +76,8 @@ st.markdown(
 # ---------------------------------------------------------------------------
 
 
-@st.cache_resource
 def get_connection() -> sqlite3.Connection:
-    """Return a shared database connection, initializing the schema if needed."""
+    """Return a database connection, initializing the schema if needed."""
     return init_db(DB_PATH)
 
 
