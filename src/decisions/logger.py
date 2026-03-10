@@ -63,3 +63,38 @@ def log_decision(
     finally:
         if owns_conn:
             conn.close()
+
+
+def log_circuit_breaker_event(
+    tier: str,
+    failure_rate: float,
+    ads_affected: int,
+    total_ads: int,
+    action: str,
+    *,
+    conn: sqlite3.Connection | None = None,
+) -> str:
+    """Log a circuit breaker trigger with structured failure stats.
+
+    Delegates to log_decision() with component="visual_circuit_breaker".
+    Returns the decision_id from log_decision().
+    """
+    pct = failure_rate * 100
+    rationale = (
+        f"Tier {tier} {action}: {pct:.1f}% failure rate "
+        f"({ads_affected}/{total_ads} ads), halting image generation"
+    )
+
+    return log_decision(
+        component="visual_circuit_breaker",
+        action=f"tier_{tier}_{action}",
+        rationale=rationale,
+        context={
+            "tier": tier,
+            "failure_rate": failure_rate,
+            "ads_affected": ads_affected,
+            "total_ads": total_ads,
+            "action": action,
+        },
+        conn=conn,
+    )
