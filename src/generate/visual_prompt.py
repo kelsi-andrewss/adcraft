@@ -1,0 +1,231 @@
+"""Visual prompt generator for AdCraft.
+
+Uses Gemini 2.5 Flash to synthesize image generation prompts from approved
+ad copy + brand style guide. Extracts the emotional hook, key visual elements,
+and brand constraints. Outputs a structured VisualBrief.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+
+from google import genai
+from google.genai import types
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from src.decisions.logger import log_decision
+from src.models.ad import AdCopy
+from src.models.brief import AdBrief
+from src.models.creative import VisualBrief
+
+VISUAL_PROMPT_MODEL = "gemini-2.5-flash"
+
+PLACEMENT_ASPECT_RATIOS: dict[str, str] = {
+    "feed": "1:1",
+    "stories": "9:16",
+    "banner": "16:9",
+}
+
+# Schema for structured output — only LLM-generated fields.
+# aspect_ratio, resolution, style_refs, placement are deterministic and set by code.
+VISUAL_PROMPT_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "prompt": {
+            "type": "string",
+            "description": (
+                "Detailed image generation prompt capturing "
+                "emotional hook, visual elements, and brand style"
+            ),
+        },
+        "negative_prompt": {
+            "type": "string",
+            "description": "Negative prompt listing visual elements to avoid",
+        },
+    },
+    "required": ["prompt", "negative_prompt"],
+}
+
+SYNTHESIS_PROMPT_TEMPLATE = """\
+You are a visual creative director for Varsity Tutors, \
+designing an image to accompany a Facebook/Instagram ad.
+
+APPROVED AD COPY:
+- Headline: {headline}
+- Primary text: {primary_text}
+- Description: {description}
+- CTA: {cta_button}
+
+AD BRIEF CONTEXT:
+- Target audience: {audience_segment}
+- Product/offer: {product_offer}
+- Campaign goal: {campaign_goal}
+- Tone: {tone}
+- Placement: {placement}
+
+BRAND VISUAL CONSTRAINTS (Varsity Tutors):
+- Color palette: blue and green tones (VT brand colors), warm accents
+- Lighting: warm, inviting, natural lighting
+- People: diverse students, confident and engaged expressions
+- Aesthetic: modern, clean, professional but approachable
+- Setting: bright learning environments, home study spaces, or abstract educational motifs
+
+YOUR TASK:
+1. Extract the emotional hook from the ad copy (what feeling should the image evoke?)
+2. Identify key visual elements implied by the copy \
+(e.g., "score improvement" -> celebratory imagery, \
+"expert tutors" -> mentoring scene)
+3. Compose a detailed image generation prompt that reinforces the ad's message
+4. Generate a negative prompt to prevent off-brand imagery
+
+NEGATIVE PROMPT MUST INCLUDE:
+- No distress, anxiety, or frustrated student depictions
+- No dark, gloomy, or harsh lighting
+- No cluttered or busy compositions
+- No text overlays or typography in the image (Meta adds those separately)
+- No stock photo cliches (thumbs up to camera, fake smiles, overly staged poses)
+- No violent, sexual, or controversial imagery
+
+Generate the visual prompt now."""
+
+
+class VisualPromptGenerator:
+    """Synthesizes image generation prompts from approved ad copy.
+
+    Uses Gemini 2.5 Flash to analyze ad copy and produce a structured
+    VisualBrief with prompt text, negative prompts, and deterministic
+    parameters (aspect ratio, resolution) based on placement.
+    """
+
+    def __init__(self, client: genai.Client | None = None) -> None:
+        if client is not None:
+            self._client = client
+        else:
+            api_key = os.environ.get("GEMINI_API_KEY", "")
+            self._client = genai.Client(api_key=api_key)
+        self._model = VISUAL_PROMPT_MODEL
+
+        log_decision(
+            "visual_prompt",
+            "engine_init",
+            f"VisualPromptGenerator initialized: model={self._model}",
+            {"model": self._model},
+        )
+
+    def generate(self, ad: AdCopy, brief: AdBrief, placement: str = "feed") -> VisualBrief:
+        """Generate a visual prompt from approved ad copy and brief.
+
+        Args:
+            ad: Approved ad copy to create imagery for.
+            brief: Original ad brief with audience/tone context.
+            placement: Ad placement type (feed, stories, banner).
+
+        Returns:
+            VisualBrief with prompt, negative_prompt, and deterministic params.
+        """
+        log_decision(
+            "visual_prompt",
+            "generation_start",
+            f"Generating visual prompt: headline='{ad.headline[:50]}', placement='{placement}'",
+            {
+                "headline": ad.headline,
+                "placement": placement,
+                "audience": brief.audience_segment,
+            },
+        )
+
+        aspect_ratio = PLACEMENT_ASPECT_RATIOS.get(placement, "1:1")
+
+        log_decision(
+            "visual_prompt",
+            "aspect_ratio_selection",
+            f"Mapped placement '{placement}' to aspect_ratio '{aspect_ratio}'",
+            {
+                "placement": placement,
+                "aspect_ratio": aspect_ratio,
+                "is_default": placement not in PLACEMENT_ASPECT_RATIOS,
+            },
+        )
+
+        prompt = SYNTHESIS_PROMPT_TEMPLATE.format(
+            headline=ad.headline,
+            primary_text=ad.primary_text,
+            description=ad.description,
+            cta_button=ad.cta_button,
+            audience_segment=brief.audience_segment,
+            product_offer=brief.product_offer,
+            campaign_goal=brief.campaign_goal,
+            tone=brief.tone,
+            placement=placement,
+        )
+
+        raw, token_count = self._call_gemini(prompt)
+
+        visual_brief = VisualBrief(
+            prompt=raw["prompt"],
+            negative_prompt=raw["negative_prompt"],
+            aspect_ratio=aspect_ratio,
+            resolution="1K",
+            placement=placement,
+        )
+
+        log_decision(
+            "visual_prompt",
+            "generation_complete",
+            f"Visual prompt generated: {len(visual_brief.prompt)} chars, tokens={token_count}",
+            {
+                "prompt_length": len(visual_brief.prompt),
+                "negative_prompt_length": len(visual_brief.negative_prompt),
+                "token_count": token_count,
+                "aspect_ratio": aspect_ratio,
+            },
+        )
+
+        return visual_brief
+
+    def _call_gemini(self, prompt: str) -> tuple[dict, int]:
+        """Call Gemini with structured output and retry logic.
+
+        Returns (parsed_response_dict, total_token_count).
+        """
+        return self._call_gemini_with_retry(prompt)
+
+    @retry(
+        retry=retry_if_exception_type((Exception,)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=60),
+        reraise=True,
+    )
+    def _call_gemini_with_retry(self, prompt: str) -> tuple[dict, int]:
+        """Inner call with tenacity retry decorator."""
+        try:
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=VISUAL_PROMPT_SCHEMA,
+                ),
+            )
+        except Exception as exc:
+            log_decision(
+                "visual_prompt",
+                "api_retry",
+                f"Gemini call failed, will retry: {type(exc).__name__}: {exc}",
+                {"model": self._model, "error": str(exc)},
+            )
+            raise
+
+        token_count = 0
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            meta = response.usage_metadata
+            token_count = getattr(meta, "total_token_count", 0) or 0
+
+        parsed = json.loads(response.text)
+        return parsed, token_count
