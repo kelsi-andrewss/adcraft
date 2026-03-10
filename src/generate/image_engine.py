@@ -23,6 +23,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from src.analytics.cost import IMAGE_PRICING
 from src.db.queries import get_image_gen_threshold
 from src.decisions.logger import log_decision
 from src.models.creative import ImageResult, VisualBrief
@@ -30,11 +31,7 @@ from src.models.creative import ImageResult, VisualBrief
 FLASH_IMAGE_MODEL = "gemini-2.5-flash-image"
 PRO_IMAGE_MODEL = "gemini-3-pro-image-preview"
 
-# Flat-rate cost estimates (no LiteLLM support for image models yet)
-IMAGE_COST_USD: dict[str, float] = {
-    FLASH_IMAGE_MODEL: 0.0,  # Free tier
-    PRO_IMAGE_MODEL: 0.04,  # ~$0.04/image
-}
+IMAGE_COST_USD = IMAGE_PRICING
 
 DEFAULT_ASPECT_RATIO = "1:1"
 DEFAULT_IMAGE_SIZE = "1K"
