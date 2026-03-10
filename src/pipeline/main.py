@@ -364,10 +364,16 @@ class BatchPipeline:
                             if image_result is not None:
                                 result.images_generated += 1
                                 result.visual_cost_usd += image_result.cost_usd
+                                self._circuit_breaker.record_variant_attempt(
+                                    ad.id, image_result.variant_type, passed=True
+                                )
                                 self._circuit_breaker.check_ad_status(ad.id)
                             elif should_attempt:
                                 # Image gen was attempted but failed/not publishable
                                 result.visual_failures += 1
+                                self._circuit_breaker.record_variant_attempt(
+                                    ad.id, "unknown", passed=False
+                                )
                                 self._circuit_breaker.check_ad_status(ad.id)
 
                 else:
