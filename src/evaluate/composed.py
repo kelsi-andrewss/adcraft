@@ -20,13 +20,14 @@ from PIL import Image as PILImage
 from src.decisions.logger import log_decision
 from src.evaluate.utils import SAFETY_SETTINGS, gemini_retry, is_retriable
 from src.models.ad import AdCopy
+from src.theme import THEME
 
 EVALUATOR_MODEL = "gemini-2.5-pro"
 PUBLISHABLE_THRESHOLD = 7.0
 
 COMPOSED_EVAL_PROMPT = (
     "You are an expert advertising creative director evaluating a complete\n"
-    "Facebook/Instagram ad unit for Varsity Tutors, a leading online tutoring\n"
+    f"Facebook/Instagram ad unit for {THEME.brand_name}, a leading online learning\n"
     "platform.\n"
     "\n"
     "You are evaluating the COMPLETE AD — copy and image together as a single\n"
@@ -48,7 +49,7 @@ COMPOSED_EVAL_PROMPT = (
     "   naturally flow from image to headline to CTA?\n"
     "\n"
     "3. OVERALL AD PUBLISHABILITY — Would you approve this ad for a real\n"
-    "   Varsity Tutors FB/IG campaign? Consider: scroll-stopping power,\n"
+    f"   {THEME.brand_name} FB/IG campaign? Consider: scroll-stopping power,\n"
     "   brand alignment, professional polish, clarity of value proposition,\n"
     "   and CTA effectiveness as a complete unit.\n"
     "\n"
@@ -60,7 +61,7 @@ COMPOSED_EVAL_PROMPT = (
     "\n"
     "4-6 (Needs Work): The ad is functional but unremarkable. Copy and image\n"
     "   are thematically related but don't amplify each other. Looks like a\n"
-    "   generic educational ad — nothing distinctly Varsity Tutors. Would get\n"
+    f"   generic educational ad — nothing distinctly {THEME.brand_name}. Would get\n"
     "   scrolled past without a second glance.\n"
     "\n"
     "7-8 (Publishable): The ad works as a cohesive unit. Image and copy\n"
@@ -70,7 +71,7 @@ COMPOSED_EVAL_PROMPT = (
     "\n"
     "9-10 (Exceptional): The ad is scroll-stopping. Image and copy form an\n"
     "   inseparable unit where removing either element weakens the whole.\n"
-    "   Distinctly Varsity Tutors, emotionally resonant, and the CTA feels\n"
+    f"   Distinctly {THEME.brand_name}, emotionally resonant, and the CTA feels\n"
     "   inevitable. Agency-quality creative.\n"
     "\n"
     "INSTRUCTIONS:\n"
@@ -83,7 +84,7 @@ COMPOSED_EVAL_PROMPT = (
     "3. Provide a single composed_score (1-10) reflecting the overall ad\n"
     "   unit quality.\n"
     "4. Be rigorous. A functional-but-generic ad is a 5-6, not a 7-8.\n"
-    "   Only ads that genuinely work as publishable Varsity Tutors creatives\n"
+    f"   Only ads that genuinely work as publishable {THEME.brand_name} creatives\n"
     "   deserve 7+.\n"
     "\n"
     "Respond with JSON matching the schema provided."

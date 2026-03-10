@@ -31,6 +31,7 @@ from src.db.queries import (
     list_ads,
 )
 from src.evaluate.rubrics import DIMENSION_WEIGHTS, PASSING_THRESHOLD
+from src.theme import THEME
 
 DB_PATH = "data/ads.db"
 
@@ -48,24 +49,26 @@ st.set_page_config(
 # Custom CSS for professional demo appearance
 # ---------------------------------------------------------------------------
 
+_r, _g, _b = THEME.primary_rgb
+
 st.markdown(
-    """
+    f"""
     <style>
     /* Metric card alignment */
-    div[data-testid="stMetric"] {
-        background-color: rgba(23, 226, 234, 0.06);
-        border: 1px solid rgba(23, 226, 234, 0.15);
+    div[data-testid="stMetric"] {{
+        background-color: rgba({_r}, {_g}, {_b}, 0.06);
+        border: 1px solid rgba({_r}, {_g}, {_b}, 0.15);
         border-radius: 8px;
         padding: 12px 16px;
-    }
+    }}
     /* Tighter expander spacing */
-    div[data-testid="stExpander"] {
+    div[data-testid="stExpander"] {{
         margin-bottom: 4px;
-    }
+    }}
     /* Tab content top padding */
-    div[data-testid="stTabContent"] {
+    div[data-testid="stTabContent"] {{
         padding-top: 1rem;
-    }
+    }}
     </style>
     """,
     unsafe_allow_html=True,

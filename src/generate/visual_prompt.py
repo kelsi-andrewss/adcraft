@@ -19,6 +19,7 @@ from src.evaluate.utils import gemini_retry, is_retriable
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 from src.models.creative import VisualBrief
+from src.theme import THEME
 
 VISUAL_PROMPT_MODEL = "gemini-2.5-flash"
 
@@ -49,28 +50,29 @@ VISUAL_PROMPT_SCHEMA: dict = {
 }
 
 SYNTHESIS_PROMPT_TEMPLATE = """\
-You are a visual creative director for Varsity Tutors, \
+You are a visual creative director for {brand_name}, \
 designing an image to accompany a Facebook/Instagram ad.
 
 APPROVED AD COPY:
-- Headline: {headline}
-- Primary text: {primary_text}
-- Description: {description}
-- CTA: {cta_button}
+- Headline: {{headline}}
+- Primary text: {{primary_text}}
+- Description: {{description}}
+- CTA: {{cta_button}}
 
 AD BRIEF CONTEXT:
-- Target audience: {audience_segment}
-- Product/offer: {product_offer}
-- Campaign goal: {campaign_goal}
-- Tone: {tone}
-- Placement: {placement}
+- Target audience: {{audience_segment}}
+- Product/offer: {{product_offer}}
+- Campaign goal: {{campaign_goal}}
+- Tone: {{tone}}
+- Placement: {{placement}}
 
-BRAND VISUAL CONSTRAINTS (Varsity Tutors):
-- Color palette: blue and green tones (VT brand colors), warm accents
+BRAND VISUAL CONSTRAINTS ({brand_name}):
+- Color palette: {primary_color}, {secondary_color}, {accent_color} brand colors, \
+{text_color} text
 - Lighting: warm, inviting, natural lighting
-- People: diverse students, confident and engaged expressions
-- Aesthetic: modern, clean, professional but approachable
-- Setting: bright learning environments, home study spaces, or abstract educational motifs
+- People: {people_descriptors}
+- Aesthetic: {visual_tone}
+- Setting: {setting_descriptors}
 
 YOUR TASK:
 1. Extract the emotional hook from the ad copy (what feeling should the image evoke?)
@@ -81,14 +83,19 @@ YOUR TASK:
 4. Generate a negative prompt to prevent off-brand imagery
 
 NEGATIVE PROMPT MUST INCLUDE:
-- No distress, anxiety, or frustrated student depictions
-- No dark, gloomy, or harsh lighting
-- No cluttered or busy compositions
-- No text overlays or typography in the image (Meta adds those separately)
-- No stock photo cliches (thumbs up to camera, fake smiles, overly staged poses)
-- No violent, sexual, or controversial imagery
+{negative_constraints}
 
-Generate the visual prompt now."""
+Generate the visual prompt now.""".format(
+    brand_name=THEME.brand_name,
+    primary_color=THEME.primary_color,
+    secondary_color=THEME.secondary_color,
+    accent_color=THEME.accent_color,
+    text_color=THEME.text_color,
+    people_descriptors=", ".join(THEME.people_descriptors),
+    visual_tone=", ".join(THEME.visual_tone),
+    setting_descriptors=", ".join(THEME.setting_descriptors),
+    negative_constraints="\n".join(f"- {c}" for c in THEME.negative_constraints),
+)
 
 
 class VisualPromptGenerator:
