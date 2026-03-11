@@ -24,7 +24,7 @@ DIMENSIONS: list[str] = list(DIMENSION_WEIGHTS.keys())
 # Thresholds
 # ---------------------------------------------------------------------------
 
-PASSING_THRESHOLD: float = 6.5
+PASSING_THRESHOLD: float = 7.0
 BRAND_VOICE_HARD_GATE: int = 5
 
 # ---------------------------------------------------------------------------

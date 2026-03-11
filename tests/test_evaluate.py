@@ -187,11 +187,11 @@ def test_hard_gate_brand_voice_below_5_fails(mock_log):
 def test_hard_gate_brand_voice_at_5_passes(mock_log):
     """brand_voice == 5 (at the gate) does NOT trigger hard gate."""
     scores = {
-        "clarity": 7.0,
-        "value_prop": 7.0,
-        "cta_effectiveness": 7.0,
+        "clarity": 7.5,
+        "value_prop": 7.5,
+        "cta_effectiveness": 7.5,
         "brand_voice": 5.0,  # At the gate — should pass
-        "emotional_resonance": 7.0,
+        "emotional_resonance": 7.5,
     }
 
     mock_client = MagicMock()
@@ -211,11 +211,11 @@ def test_hard_gate_brand_voice_at_5_passes(mock_log):
 
 
 @patch("src.evaluate.engine.log_decision")
-def test_passing_threshold_at_6_5_passes(mock_log):
-    """Weighted average == 6.5 passes the threshold."""
-    # Engineer scores so weighted average == 6.5
-    # All dimensions at 6.5 gives weighted avg of 6.5
-    scores = {d: 6.5 for d in DIMENSIONS}
+def test_passing_threshold_at_7_0_passes(mock_log):
+    """Weighted average == 7.0 passes the threshold."""
+    # Engineer scores so weighted average == 7.0
+    # All dimensions at 7.0 gives weighted avg of 7.0
+    scores = {d: 7.0 for d in DIMENSIONS}
 
     mock_client = MagicMock()
     response_data = _make_all_dimensions_response(scores)
@@ -229,9 +229,9 @@ def test_passing_threshold_at_6_5_passes(mock_log):
 
 
 @patch("src.evaluate.engine.log_decision")
-def test_passing_threshold_at_6_4_fails(mock_log):
-    """Weighted average == 6.4 fails the threshold."""
-    scores = {d: 6.4 for d in DIMENSIONS}
+def test_passing_threshold_at_6_9_fails(mock_log):
+    """Weighted average == 6.9 fails the threshold."""
+    scores = {d: 6.9 for d in DIMENSIONS}
 
     mock_client = MagicMock()
     response_data = _make_all_dimensions_response(scores)

@@ -1,7 +1,7 @@
 """Iteration controller — procedural state machine for gen/eval/fix cycles.
 
 Orchestrates: generate -> evaluate -> (if fail) component fix -> coherence check
--> re-evaluate, with full regeneration fallback when coherence breaks. Max 3 cycles.
+-> re-evaluate, with full regeneration fallback when coherence breaks. Max 5 cycles.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from src.models.brief import AdBrief
 from src.models.evaluation import EvaluationResult
 from src.models.iteration import IterationRecord
 
-MAX_CYCLES = 3
+MAX_CYCLES = 5
 COHERENCE_DROP_THRESHOLD = 0.5
 
 
@@ -182,7 +182,7 @@ class IterationController:
 
                     source_ad = ad
                     # Generate a new ad using the feedback-enriched brief
-                    fix_brief = self._build_fix_brief(brief, feedback)
+                    fix_brief = self._build_fix_brief(brief, feedback, ad)
                     ad = self._gen.generate(fix_brief)
                     ad = self._persist_ad(ad, brief)
 
@@ -376,18 +376,26 @@ class IterationController:
         )
 
     @staticmethod
-    def _build_fix_brief(brief: AdBrief, feedback: str) -> AdBrief:
+    def _build_fix_brief(brief: AdBrief, feedback: str, previous_ad: AdCopy) -> AdBrief:
         """Create a brief that includes feedback for a component fix.
 
-        Appends the feedback to the competitive_context field so the
-        generator sees both original brief and iteration feedback.
+        Prepends the previous ad's text so the generator can make targeted
+        edits, then appends the feedback to the competitive_context field.
         """
+        previous_ad_text = (
+            "PREVIOUS AD (improve, don't start from scratch):\n"
+            f"Primary text: {previous_ad.primary_text}\n"
+            f"Headline: {previous_ad.headline}\n"
+            f"Description: {previous_ad.description}\n"
+            f"CTA: {previous_ad.cta_button}"
+        )
+        enriched_feedback = previous_ad_text + "\n\n" + feedback
         return AdBrief(
             audience_segment=brief.audience_segment,
             product_offer=brief.product_offer,
             campaign_goal=brief.campaign_goal,
             tone=brief.tone,
-            competitive_context=(brief.competitive_context + "\n\n" + feedback),
+            competitive_context=(brief.competitive_context + "\n\n" + enriched_feedback),
         )
 
     @staticmethod
