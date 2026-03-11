@@ -2,7 +2,6 @@
 
 Implements a two-tier escalation ladder: Gemini 2.5 Flash Image (free tier)
 generates first, escalating to Gemini 3 Pro Image Preview on failure.
-Dynamic quality threshold gates entry into image generation.
 
 Tenacity retry handles transient API errors within each model tier.
 Escalation logic handles the tier switch between models.
@@ -11,7 +10,6 @@ Escalation logic handles the tier switch between models.
 from __future__ import annotations
 
 import os
-import sqlite3
 from pathlib import Path
 
 from google import genai
@@ -19,7 +17,6 @@ from google.genai import types
 from google.genai.errors import APIError
 
 from src.analytics.cost import IMAGE_PRICING
-from src.db.queries import get_image_gen_threshold
 from src.decisions.logger import log_decision
 from src.evaluate.utils import gemini_retry, is_retriable
 from src.models.creative import ImageResult, VisualBrief
@@ -42,8 +39,6 @@ class ImageGenerationEngine:
     """Generates ad images with a two-tier quality escalation ladder.
 
     Flash Image generates first (free). On failure, escalates to Pro Image.
-    Dynamic threshold from quality_snapshots gates whether image generation
-    should happen at all.
     """
 
     def __init__(self, client: genai.Client | None = None) -> None:
@@ -61,28 +56,6 @@ class ImageGenerationEngine:
             f"ImageGenerationEngine initialized: flash={FLASH_IMAGE_MODEL}, pro={PRO_IMAGE_MODEL}",
             {"flash_model": FLASH_IMAGE_MODEL, "pro_model": PRO_IMAGE_MODEL},
         )
-
-    def should_generate_image(self, weighted_avg: float, conn: sqlite3.Connection) -> bool:
-        """Check whether the ad's quality score meets the dynamic threshold.
-
-        Threshold = max(7.0, running_weighted_avg - 0.5) from the most
-        recent quality snapshot, falling back to 7.0 with no data.
-        """
-        threshold = get_image_gen_threshold(conn)
-
-        log_decision(
-            "image_generator",
-            "threshold_check",
-            f"Image gen threshold check: score={weighted_avg:.2f}, threshold={threshold:.2f}, "
-            f"eligible={weighted_avg >= threshold}",
-            {
-                "weighted_avg": weighted_avg,
-                "threshold": threshold,
-                "eligible": weighted_avg >= threshold,
-            },
-        )
-
-        return weighted_avg >= threshold
 
     def generate_image(
         self,
