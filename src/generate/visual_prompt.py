@@ -95,6 +95,58 @@ Generate the visual prompt now.""".format(
     negative_constraints="\n".join(f"- {c}" for c in THEME.negative_constraints),
 )
 
+REGENERATION_PROMPT_TEMPLATE = """\
+You are a visual creative director redesigning an image for a Facebook/Instagram ad.
+The previous visual prompt failed composed evaluation. Your job is to generate a \
+completely new visual prompt that avoids the identified issues while preserving brand \
+constraints and emotional alignment with the ad copy.
+
+PREVIOUS FAILURE RATIONALE:
+{{rationale}}
+
+APPROVED AD COPY:
+- Headline: {{headline}}
+- Primary text: {{primary_text}}
+- Description: {{description}}
+- CTA: {{cta_button}}
+
+AD BRIEF CONTEXT:
+- Target audience: {{audience_segment}}
+- Product/offer: {{product_offer}}
+- Campaign goal: {{campaign_goal}}
+- Tone: {{tone}}
+- Placement: {{placement}}
+
+BRAND VISUAL CONSTRAINTS:
+- Color palette: {primary_color}, {secondary_color}, {accent_color} brand colors, \
+{text_color} text
+- Lighting: warm, inviting, natural lighting
+- People: {people_descriptors}
+- Aesthetic: {visual_tone}
+- Setting: {setting_descriptors}
+
+YOUR TASK:
+1. Analyze the failure rationale — identify the specific visual shortcomings described
+2. Design a completely new visual concept that addresses those shortcomings \
+(do NOT patch the old prompt — start fresh)
+3. Ensure the new prompt reinforces the ad copy's emotional message and campaign goal
+4. Preserve all brand constraints (colors, aesthetic, people, setting)
+5. Generate a negative prompt to prevent off-brand imagery and the previously identified issues
+
+NEGATIVE PROMPT MUST INCLUDE:
+{negative_constraints}
+
+Generate the new visual prompt now.""".format(
+    primary_color=THEME.primary_color,
+    secondary_color=THEME.secondary_color,
+    accent_color=THEME.accent_color,
+    text_color=THEME.text_color,
+    people_descriptors=", ".join(THEME.people_descriptors),
+    visual_tone=", ".join(THEME.visual_tone),
+    setting_descriptors=", ".join(THEME.setting_descriptors),
+    negative_constraints="\n".join(f"- {c}" for c in THEME.negative_constraints),
+)
+
 
 class VisualPromptGenerator:
     """Synthesizes image generation prompts from approved ad copy.
@@ -180,6 +232,87 @@ class VisualPromptGenerator:
             "visual_prompt",
             "generation_complete",
             f"Visual prompt generated: {len(visual_brief.prompt)} chars, tokens={token_count}",
+            {
+                "prompt_length": len(visual_brief.prompt),
+                "negative_prompt_length": len(visual_brief.negative_prompt),
+                "token_count": token_count,
+                "aspect_ratio": aspect_ratio,
+            },
+        )
+
+        return visual_brief
+
+    def regenerate(
+        self,
+        ad: AdCopy,
+        brief: AdBrief,
+        rationale: str,
+        placement: str = "feed",
+    ) -> VisualBrief:
+        """Generate a fresh visual prompt informed by previous composed eval failure.
+
+        Args:
+            ad: Approved ad copy.
+            brief: Original ad brief with audience/tone context.
+            rationale: Most recent composed eval rationale (single string, not accumulated).
+            placement: Ad placement type (feed, stories, banner).
+
+        Returns:
+            VisualBrief with new prompt, negative_prompt, and deterministic params.
+        """
+        log_decision(
+            "visual_prompt",
+            "regeneration_start",
+            f"Regenerating visual prompt: headline='{ad.headline[:50]}', "
+            f"placement='{placement}', rationale_len={len(rationale)}",
+            {
+                "headline": ad.headline,
+                "placement": placement,
+                "audience": brief.audience_segment,
+                "rationale_length": len(rationale),
+            },
+        )
+
+        aspect_ratio = PLACEMENT_ASPECT_RATIOS.get(placement, "1:1")
+
+        log_decision(
+            "visual_prompt",
+            "aspect_ratio_selection",
+            f"Mapped placement '{placement}' to aspect_ratio '{aspect_ratio}'",
+            {
+                "placement": placement,
+                "aspect_ratio": aspect_ratio,
+                "is_default": placement not in PLACEMENT_ASPECT_RATIOS,
+            },
+        )
+
+        prompt = REGENERATION_PROMPT_TEMPLATE.format(
+            rationale=rationale,
+            headline=ad.headline,
+            primary_text=ad.primary_text,
+            description=ad.description,
+            cta_button=ad.cta_button,
+            audience_segment=brief.audience_segment,
+            product_offer=brief.product_offer,
+            campaign_goal=brief.campaign_goal,
+            tone=brief.tone,
+            placement=placement,
+        )
+
+        raw, token_count = self._call_gemini(prompt)
+
+        visual_brief = VisualBrief(
+            prompt=raw["prompt"],
+            negative_prompt=raw["negative_prompt"],
+            aspect_ratio=aspect_ratio,
+            resolution="1K",
+            placement=placement,
+        )
+
+        log_decision(
+            "visual_prompt",
+            "regeneration_complete",
+            f"Visual prompt regenerated: {len(visual_brief.prompt)} chars, tokens={token_count}",
             {
                 "prompt_length": len(visual_brief.prompt),
                 "negative_prompt_length": len(visual_brief.negative_prompt),
