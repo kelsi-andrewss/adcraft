@@ -2,9 +2,9 @@
 
 Processes a brief matrix sequentially with rate limiting, tracking pass/fail
 counts and persisting quality snapshots after each batch. After text iteration
-passes, qualifying ads flow through image generation, variant selection,
-composed evaluation, and DB persistence. The visual path is gated by quality
-threshold, wrapped by VisualCircuitBreaker, and skippable via --no-images.
+passes, ads flow through a 3-cycle visual iteration loop: generate variants,
+composed-eval each, and regenerate the prompt from failure rationale on miss.
+Wrapped by VisualCircuitBreaker and skippable via --no-images.
 
 Entry point: python -m src.pipeline.main
 """
@@ -12,6 +12,7 @@ Entry point: python -m src.pipeline.main
 from __future__ import annotations
 
 import argparse
+import io
 import random
 import sys
 import time
@@ -40,6 +41,8 @@ from src.iterate.visual_healing import VisualCircuitBreaker
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 from src.models.creative import ImageResult
+
+MAX_VISUAL_CYCLES: int = 3
 
 
 @dataclass
@@ -185,97 +188,169 @@ class BatchPipeline:
         )
         return briefs
 
-    def _run_visual_pipeline(
-        self, ad: AdCopy, brief: AdBrief, eval_score: float
-    ) -> ImageResult | None:
-        """Run the visual pipeline for a single ad.
+    def _run_visual_pipeline(self, ad: AdCopy, brief: AdBrief) -> tuple[ImageResult | None, float]:
+        """Run the visual iteration loop for a single ad.
 
-        Gate: score must meet dynamic threshold. Then generate variants,
-        pick best, run composed eval, persist if publishable. Any exception
-        is caught and logged — visual failure never crashes the batch.
+        Up to MAX_VISUAL_CYCLES attempts: generate/regenerate a visual prompt,
+        produce 2 variants, composed-eval each (best-first, early exit on pass).
+        On failure the composed eval rationale feeds back into the next cycle's
+        prompt regeneration. Any exception is caught and logged — visual failure
+        never crashes the batch.
 
-        Returns the best ImageResult if the image is publishable, else None.
+        Returns:
+            Tuple of (best passing ImageResult or None, accumulated visual cost).
         """
+        accumulated_cost = 0.0
+        cycle_count = 0
+        last_rationale: str | None = None
+
         try:
-            # Gate: check threshold
-            if not self._image_engine.should_generate_image(eval_score, self._conn):
+            while cycle_count < MAX_VISUAL_CYCLES:
                 log_decision(
                     "pipeline",
-                    "visual_skip_threshold",
-                    f"Ad '{ad.id}' below image gen threshold (score={eval_score:.2f})",
-                    {"ad_id": ad.id, "eval_score": eval_score},
-                )
-                return None
-
-            # Rate limiter before variant generation
-            self._rate_limiter.acquire()
-
-            # Generate + evaluate variants (decision-23: 2 variants)
-            variants = self._variant_generator.generate_variants(ad, brief, num_variants=2)
-
-            if not variants:
-                log_decision(
-                    "pipeline",
-                    "visual_no_variants",
-                    f"Ad '{ad.id}' all variants failed, keeping text-only",
-                    {"ad_id": ad.id},
-                )
-                return None
-
-            best = variants[0]  # already sorted best-first
-
-            # Load image for composed eval
-            pil_image = PILImage.open(best.file_path)
-
-            # Rate limiter before composed eval
-            self._rate_limiter.acquire()
-
-            # Composed eval — scores the complete ad unit (copy + image)
-            composed_result = self._composed_evaluator.evaluate_composed(pil_image, ad)
-
-            if not composed_result["publishable"]:
-                log_decision(
-                    "pipeline",
-                    "visual_not_publishable",
-                    f"Ad '{ad.id}' composed eval not publishable "
-                    f"(score={composed_result['composed_score']:.1f})",
+                    "visual_cycle_start",
+                    f"Ad '{ad.id}' visual cycle {cycle_count}/{MAX_VISUAL_CYCLES}",
                     {
                         "ad_id": ad.id,
-                        "composed_score": composed_result["composed_score"],
-                        "rationale": composed_result["rationale"][:200],
+                        "cycle": cycle_count,
+                        "max_cycles": MAX_VISUAL_CYCLES,
+                        "has_prior_rationale": last_rationale is not None,
                     },
                 )
-                return None
 
-            # Persist image to DB
-            update_ad_image(
-                self._conn,
-                ad.id,
-                image_path=best.file_path,
-                visual_prompt=best.generation_config.get("negative_prompt", ""),
-                image_model=best.model_id,
-                image_cost_usd=best.cost_usd,
-                variant_group_id=best.variant_group_id,
-                variant_type=best.variant_type,
-            )
+                # Rate limit before prompt generation
+                self._rate_limiter.acquire()
 
+                # Cycle 0: fresh prompt. Cycles 1+: regenerate from failure rationale.
+                if cycle_count == 0:
+                    visual_brief = self._prompt_generator.generate(ad, brief)
+                else:
+                    log_decision(
+                        "pipeline",
+                        "visual_regeneration_trigger",
+                        f"Ad '{ad.id}' regenerating prompt from rationale: "
+                        f"'{last_rationale[:200] if last_rationale else ''}'",
+                        {
+                            "ad_id": ad.id,
+                            "cycle": cycle_count,
+                            "rationale_snippet": (last_rationale[:200] if last_rationale else ""),
+                        },
+                    )
+                    visual_brief = self._prompt_generator.regenerate(
+                        ad,
+                        brief,
+                        last_rationale,  # type: ignore[arg-type]
+                    )
+
+                # Generate 2 variants using the (re)generated brief
+                variants = self._variant_generator.generate_variants(
+                    ad, brief, num_variants=2, visual_brief=visual_brief
+                )
+
+                # Accumulate cost for all generated variants
+                for v in variants:
+                    accumulated_cost += v.cost_usd
+
+                if not variants:
+                    log_decision(
+                        "pipeline",
+                        "visual_no_variants",
+                        f"Ad '{ad.id}' cycle {cycle_count}: no variants generated",
+                        {"ad_id": ad.id, "cycle": cycle_count},
+                    )
+                    cycle_count += 1
+                    continue
+
+                # Composed eval each variant (best-first, early exit on pass)
+                for variant in variants:
+                    pil_image = PILImage.open(
+                        io.BytesIO(variant.image_bytes)
+                        if variant.image_bytes
+                        else variant.file_path
+                    )
+
+                    self._rate_limiter.acquire()
+
+                    composed_result = self._composed_evaluator.evaluate_composed(pil_image, ad)
+
+                    log_decision(
+                        "pipeline",
+                        "visual_composed_eval_result",
+                        f"Ad '{ad.id}' cycle {cycle_count} variant "
+                        f"'{variant.variant_type}': "
+                        f"score={composed_result['composed_score']:.1f}, "
+                        f"publishable={composed_result['publishable']}",
+                        {
+                            "ad_id": ad.id,
+                            "cycle": cycle_count,
+                            "variant_type": variant.variant_type,
+                            "composed_score": composed_result["composed_score"],
+                            "publishable": composed_result["publishable"],
+                        },
+                    )
+
+                    if composed_result["publishable"]:
+                        # Persist image to DB
+                        update_ad_image(
+                            self._conn,
+                            ad.id,
+                            image_path=variant.file_path,
+                            visual_prompt=variant.generation_config.get("negative_prompt", ""),
+                            image_model=variant.model_id,
+                            image_cost_usd=variant.cost_usd,
+                            variant_group_id=variant.variant_group_id,
+                            variant_type=variant.variant_type,
+                        )
+
+                        log_decision(
+                            "pipeline",
+                            "visual_published",
+                            f"Ad '{ad.id}' image published on cycle {cycle_count}: "
+                            f"model={variant.model_id}, cost=${variant.cost_usd:.4f}, "
+                            f"composed_score={composed_result['composed_score']:.1f}",
+                            {
+                                "ad_id": ad.id,
+                                "cycle": cycle_count,
+                                "model_id": variant.model_id,
+                                "cost_usd": variant.cost_usd,
+                                "composed_score": composed_result["composed_score"],
+                                "variant_type": variant.variant_type,
+                                "variant_group_id": variant.variant_group_id,
+                                "accumulated_cost": accumulated_cost,
+                            },
+                        )
+
+                        return variant, accumulated_cost
+
+                    # Capture rationale from this variant's failure
+                    last_rationale = composed_result["rationale"]
+
+                # All variants failed this cycle
+                log_decision(
+                    "pipeline",
+                    "visual_cycle_failed",
+                    f"Ad '{ad.id}' cycle {cycle_count}: all variants failed composed eval",
+                    {
+                        "ad_id": ad.id,
+                        "cycle": cycle_count,
+                        "last_rationale_snippet": (last_rationale[:200] if last_rationale else ""),
+                    },
+                )
+                cycle_count += 1
+
+            # Budget exhausted — all cycles failed
             log_decision(
                 "pipeline",
-                "visual_published",
-                f"Ad '{ad.id}' image published: model={best.model_id}, "
-                f"cost=${best.cost_usd:.4f}, "
-                f"composed_score={composed_result['composed_score']:.1f}",
+                "visual_budget_exhausted",
+                f"Ad '{ad.id}' exhausted {MAX_VISUAL_CYCLES} visual cycles, "
+                f"falling back to text-only (accumulated_cost=${accumulated_cost:.4f})",
                 {
                     "ad_id": ad.id,
-                    "model_id": best.model_id,
-                    "cost_usd": best.cost_usd,
-                    "composed_score": composed_result["composed_score"],
-                    "variant_type": best.variant_type,
-                    "variant_group_id": best.variant_group_id,
+                    "max_cycles": MAX_VISUAL_CYCLES,
+                    "accumulated_cost": accumulated_cost,
                 },
             )
-
-            return best
+            return None, accumulated_cost
 
         except Exception as exc:
             log_decision(
@@ -286,9 +361,10 @@ class BatchPipeline:
                     "ad_id": ad.id,
                     "error_type": type(exc).__name__,
                     "error": str(exc),
+                    "accumulated_cost": accumulated_cost,
                 },
             )
-            return None
+            return None, accumulated_cost
 
     def run(self, briefs: list[AdBrief] | None = None, *, no_images: bool = False) -> BatchResult:
         """Run the batch pipeline over the given briefs.
@@ -356,29 +432,23 @@ class BatchPipeline:
                                 {"brief_index": i},
                             )
                         else:
-                            # Determine if image gen was attempted (score above threshold)
-                            should_attempt = self._image_engine.should_generate_image(
-                                final_eval.weighted_average, self._conn
-                            )
-
-                            image_result = self._run_visual_pipeline(
-                                ad, brief, final_eval.weighted_average
-                            )
+                            image_result, visual_cost = self._run_visual_pipeline(ad, brief)
+                            result.visual_cost_usd += visual_cost
 
                             if image_result is not None:
                                 result.images_generated += 1
-                                result.visual_cost_usd += image_result.cost_usd
                                 self._circuit_breaker.record_variant_attempt(
-                                    ad.id, image_result.variant_type, passed=True
+                                    ad.id,
+                                    image_result.variant_type or "unknown",
+                                    passed=True,
                                 )
-                                self._circuit_breaker.check_ad_status(ad.id)
-                            elif should_attempt:
-                                # Image gen was attempted but failed/not publishable
+                            else:
                                 result.visual_failures += 1
                                 self._circuit_breaker.record_variant_attempt(
                                     ad.id, "unknown", passed=False
                                 )
-                                self._circuit_breaker.check_ad_status(ad.id)
+
+                            self._circuit_breaker.check_ad_status(ad.id)
 
                 else:
                     result.failed += 1

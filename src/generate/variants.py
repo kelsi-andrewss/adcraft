@@ -20,7 +20,7 @@ from src.generate.image_engine import ImageGenerationEngine
 from src.generate.visual_prompt import VisualPromptGenerator
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
-from src.models.creative import ImageResult
+from src.models.creative import ImageResult, VisualBrief
 from src.models.evaluation import DimensionScore
 
 VARIANT_TYPES: dict[str, str] = {
@@ -82,6 +82,7 @@ class VariantGenerator:
         ad_copy: AdCopy,
         brief: AdBrief,
         num_variants: int = 3,
+        visual_brief: VisualBrief | None = None,
     ) -> list[ImageResult]:
         """Generate visual variants and return them sorted best-first.
 
@@ -89,6 +90,9 @@ class VariantGenerator:
             ad_copy: Approved ad copy to create imagery for.
             brief: Original ad brief with audience/tone context.
             num_variants: Number of variants to generate (capped at len(VARIANT_TYPES)).
+            visual_brief: Pre-calculated VisualBrief to use instead of generating
+                internally. When provided, skips self._prompt_generator.generate()
+                and uses this brief as the base for all variants.
 
         Returns:
             List of ImageResults sorted by visual eval score descending.
@@ -98,16 +102,20 @@ class VariantGenerator:
         effective_num = min(num_variants, len(VARIANT_TYPES))
         variant_type_names = list(VARIANT_TYPES.keys())[:effective_num]
 
+        brief_source = "pre-calculated" if visual_brief is not None else "internal"
+
         log_decision(
             "variant_generator",
             "variant_generation_start",
             f"Starting variant generation for ad={ad_copy.id}, "
-            f"group={variant_group_id}, variants={effective_num}",
+            f"group={variant_group_id}, variants={effective_num}, "
+            f"brief_source={brief_source}",
             {
                 "ad_id": ad_copy.id,
                 "variant_group_id": variant_group_id,
                 "num_variants": effective_num,
                 "variant_types": variant_type_names,
+                "brief_source": brief_source,
             },
         )
 
@@ -117,8 +125,11 @@ class VariantGenerator:
         for variant_type in variant_type_names:
             modifier = VARIANT_TYPES[variant_type]
 
-            # Generate base visual brief from ad copy + brief
-            base_brief = self._prompt_generator.generate(ad_copy, brief)
+            # Use supplied visual brief or generate one internally
+            if visual_brief is not None:
+                base_brief = visual_brief
+            else:
+                base_brief = self._prompt_generator.generate(ad_copy, brief)
 
             # Prepend creative direction modifier to the prompt
             modified_brief = base_brief.model_copy(
