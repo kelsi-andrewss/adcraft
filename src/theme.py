@@ -58,6 +58,7 @@ NERDY_THEME = BrandTheme(
         "No text overlays or typography in the image (Meta adds those separately)",
         "No stock photo cliches (thumbs up to camera, fake smiles, overly staged poses)",
         "No violent, sexual, or controversial imagery",
+        "No brand names, logos, wordmarks, or company names rendered as text in the image",
     ],
 )
 

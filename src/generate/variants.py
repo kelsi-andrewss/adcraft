@@ -22,7 +22,6 @@ from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 from src.models.creative import ImageResult
 from src.models.evaluation import DimensionScore
-from src.theme import THEME
 
 VARIANT_TYPES: dict[str, str] = {
     "lifestyle": (
@@ -32,7 +31,7 @@ VARIANT_TYPES: dict[str, str] = {
     ),
     "product": (
         "Creative direction: clean, focused composition featuring the "
-        f"{THEME.brand_name} platform — laptop screen, app interface, branded "
+        "product platform — laptop screen, app interface, learning "
         "materials. Minimal background, professional lighting."
     ),
     "emotional": (

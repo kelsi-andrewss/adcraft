@@ -50,8 +50,7 @@ VISUAL_PROMPT_SCHEMA: dict = {
 }
 
 SYNTHESIS_PROMPT_TEMPLATE = """\
-You are a visual creative director for {brand_name}, \
-designing an image to accompany a Facebook/Instagram ad.
+You are a visual creative director designing an image to accompany a Facebook/Instagram ad.
 
 APPROVED AD COPY:
 - Headline: {{headline}}
@@ -66,7 +65,7 @@ AD BRIEF CONTEXT:
 - Tone: {{tone}}
 - Placement: {{placement}}
 
-BRAND VISUAL CONSTRAINTS ({brand_name}):
+BRAND VISUAL CONSTRAINTS:
 - Color palette: {primary_color}, {secondary_color}, {accent_color} brand colors, \
 {text_color} text
 - Lighting: warm, inviting, natural lighting
@@ -86,7 +85,6 @@ NEGATIVE PROMPT MUST INCLUDE:
 {negative_constraints}
 
 Generate the visual prompt now.""".format(
-    brand_name=THEME.brand_name,
     primary_color=THEME.primary_color,
     secondary_color=THEME.secondary_color,
     accent_color=THEME.accent_color,
