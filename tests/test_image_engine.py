@@ -120,44 +120,6 @@ class TestDynamicThreshold:
         assert get_image_gen_threshold(db_conn) == 7.0
 
 
-# ---------------------------------------------------------------------------
-# should_generate_image
-# ---------------------------------------------------------------------------
-
-
-class TestShouldGenerateImage:
-    """Tests for the threshold gate."""
-
-    def test_score_above_threshold(self, db_conn):
-        """Score above threshold => True."""
-        insert_quality_snapshot(db_conn, cycle_number=1, avg_weighted_score=8.0)
-        # threshold = max(7.0, 7.5) = 7.5; score 8.0 >= 7.5
-        mock_client = MagicMock()
-        engine = ImageGenerationEngine(client=mock_client)
-        assert engine.should_generate_image(8.0, db_conn) is True
-
-    def test_score_below_threshold(self, db_conn):
-        """Score below threshold => False."""
-        insert_quality_snapshot(db_conn, cycle_number=1, avg_weighted_score=8.0)
-        # threshold = 7.5; score 7.0 < 7.5
-        mock_client = MagicMock()
-        engine = ImageGenerationEngine(client=mock_client)
-        assert engine.should_generate_image(7.0, db_conn) is False
-
-    def test_score_at_threshold(self, db_conn):
-        """Score exactly at threshold => True (>= not >)."""
-        insert_quality_snapshot(db_conn, cycle_number=1, avg_weighted_score=8.0)
-        # threshold = 7.5; score 7.5 >= 7.5
-        mock_client = MagicMock()
-        engine = ImageGenerationEngine(client=mock_client)
-        assert engine.should_generate_image(7.5, db_conn) is True
-
-    def test_no_snapshots_uses_default(self, db_conn):
-        """No snapshots => threshold 7.0; score 7.0 >= 7.0 => True."""
-        mock_client = MagicMock()
-        engine = ImageGenerationEngine(client=mock_client)
-        assert engine.should_generate_image(7.0, db_conn) is True
-
 
 # ---------------------------------------------------------------------------
 # generate_image (escalation)

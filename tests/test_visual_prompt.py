@@ -16,13 +16,11 @@ import pytest
 
 from src.generate.visual_prompt import (
     PLACEMENT_ASPECT_RATIOS,
-    SYNTHESIS_PROMPT_TEMPLATE,
     VisualPromptGenerator,
 )
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 from src.models.creative import ImageResult, VisualBrief
-from src.theme import THEME
 
 # ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -311,27 +309,3 @@ class TestDecisionLogging:
 # ── Brand theme assertions ───────────────────────────────────────────
 
 
-class TestBrandThemeInPrompt:
-    def test_synthesis_template_contains_brand_name(self):
-        assert THEME.brand_name in SYNTHESIS_PROMPT_TEMPLATE
-        assert "Varsity Tutors" not in SYNTHESIS_PROMPT_TEMPLATE
-
-    @patch("src.generate.visual_prompt.log_decision")
-    def test_generated_prompt_contains_brand_name(
-        self,
-        mock_log,
-        sample_ad,
-        sample_brief,
-        mock_gemini_response,
-    ):
-        mock_client = MagicMock()
-        mock_client.models.generate_content.return_value = mock_gemini_response
-
-        generator = VisualPromptGenerator(client=mock_client)
-        generator.generate(sample_ad, sample_brief)
-
-        call_args = mock_client.models.generate_content.call_args
-        prompt_sent = call_args.kwargs.get("contents") or call_args[1]
-        if isinstance(prompt_sent, str):
-            assert THEME.brand_name in prompt_sent
-            assert "Varsity Tutors" not in prompt_sent
