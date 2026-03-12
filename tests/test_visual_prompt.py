@@ -307,5 +307,3 @@ class TestDecisionLogging:
 
 
 # ── Brand theme assertions ───────────────────────────────────────────
-
-

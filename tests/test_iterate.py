@@ -47,27 +47,32 @@ def _make_eval(
     ad_id: str,
     *,
     clarity: float = 7.0,
-    value_prop: float = 7.0,
+    learner_benefit: float = 7.0,
     cta_effectiveness: float = 7.0,
     brand_voice: float = 7.0,
-    emotional_resonance: float = 7.0,
+    student_empathy: float = 7.0,
+    pedagogical_integrity: float = 7.0,
     passed: bool = True,
 ) -> EvaluationResult:
     """Build an EvaluationResult with controllable per-dimension scores."""
     scores = [
         DimensionScore(dimension="clarity", score=clarity, rationale="ok"),
-        DimensionScore(dimension="value_prop", score=value_prop, rationale="ok"),
+        DimensionScore(dimension="learner_benefit", score=learner_benefit, rationale="ok"),
         DimensionScore(dimension="cta_effectiveness", score=cta_effectiveness, rationale="ok"),
         DimensionScore(dimension="brand_voice", score=brand_voice, rationale="ok"),
-        DimensionScore(dimension="emotional_resonance", score=emotional_resonance, rationale="ok"),
+        DimensionScore(dimension="student_empathy", score=student_empathy, rationale="ok"),
+        DimensionScore(
+            dimension="pedagogical_integrity", score=pedagogical_integrity, rationale="ok"
+        ),
     ]
     # Compute actual weighted average
     weights = {
-        "clarity": 0.25,
-        "value_prop": 0.25,
-        "cta_effectiveness": 0.20,
-        "brand_voice": 0.15,
-        "emotional_resonance": 0.15,
+        "clarity": 0.20,
+        "learner_benefit": 0.20,
+        "cta_effectiveness": 0.16,
+        "brand_voice": 0.12,
+        "student_empathy": 0.12,
+        "pedagogical_integrity": 0.20,
     }
     w_avg = sum(s.score * weights[s.dimension] for s in scores)
     return EvaluationResult(
@@ -137,13 +142,13 @@ class TestSelfHealer:
             assert plan.severity in ("minor", "major")
             seen_strategies.add(plan.strategy_text)
 
-        # All 5 dimensions produce distinct strategies
-        assert len(seen_strategies) == 5
+        # All 6 dimensions produce distinct strategies
+        assert len(seen_strategies) == 6
 
     @patch("src.iterate.healing.log_decision")
     def test_diagnose_weakest(self, mock_log):
         healer = SelfHealer()
-        evaluation = _make_eval("ad-1", clarity=3.0, value_prop=7.0)
+        evaluation = _make_eval("ad-1", clarity=3.0, learner_benefit=7.0)
         assert healer.diagnose(evaluation) == "clarity"
 
     @patch("src.iterate.healing.log_decision")
@@ -152,6 +157,17 @@ class TestSelfHealer:
         # Both clarity and brand_voice at 4.0 — prefer brand_voice (hard-gated)
         evaluation = _make_eval("ad-1", clarity=4.0, brand_voice=4.0)
         assert healer.diagnose(evaluation) == "brand_voice"
+
+    @patch("src.iterate.healing.log_decision")
+    def test_diagnose_tie_prefers_pedagogical_integrity(self, mock_log):
+        """When pedagogical_integrity and student_empathy are tied, prefer pedagogical_integrity."""
+        healer = SelfHealer()
+        evaluation = _make_eval(
+            "ad-1",
+            pedagogical_integrity=4.0,
+            student_empathy=4.0,
+        )
+        assert healer.diagnose(evaluation) == "pedagogical_integrity"
 
     @patch("src.iterate.healing.log_decision")
     def test_original_brief_in_every_prompt(self, mock_log):
@@ -239,20 +255,22 @@ class TestIterationController:
         initial_eval = _make_eval(
             "",
             clarity=5.0,
-            value_prop=5.0,
+            learner_benefit=5.0,
             cta_effectiveness=5.0,
             brand_voice=5.0,
-            emotional_resonance=5.0,
+            student_empathy=5.0,
+            pedagogical_integrity=5.0,
             passed=False,
         )
         # After component fix: coherence broken (big drop)
         broken_eval = _make_eval(
             "",
             clarity=6.0,
-            value_prop=2.0,
+            learner_benefit=2.0,
             cta_effectiveness=2.0,
             brand_voice=2.0,
-            emotional_resonance=2.0,
+            student_empathy=2.0,
+            pedagogical_integrity=2.0,
             passed=False,
         )
         # After full regen: passes

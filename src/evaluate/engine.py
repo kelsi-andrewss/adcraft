@@ -1,11 +1,11 @@
 """Evaluation engine for AdCraft.
 
 Cross-model LLM-as-judge using Gemini 2.5 Pro. Two modes:
-- evaluate_iteration: single call, all 5 dimensions (fast, for iteration loops)
-- evaluate_final: 5 separate calls, one per dimension (precise, for final scoring)
+- evaluate_iteration: single call, all 6 dimensions (fast, for iteration loops)
+- evaluate_final: 6 separate calls, one per dimension (precise, for final scoring)
 
 Both modes enforce CoT (rationale before score), apply weighted aggregation,
-and enforce the brand_voice hard gate.
+and enforce the brand_voice and pedagogical_integrity hard gates.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from src.evaluate.rubrics import (
     DIMENSION_WEIGHTS,
     DIMENSIONS,
     PASSING_THRESHOLD,
+    PEDAGOGICAL_INTEGRITY_HARD_GATE,
     SINGLE_DIMENSION_SCHEMA,
     build_all_dimensions_prompt,
     build_single_dimension_prompt,
@@ -44,7 +45,7 @@ EVALUATOR_MODEL = "gemini-2.5-pro"
 
 
 class EvaluationEngine:
-    """Scores ad copy across 5 dimensions using Gemini 2.5 Pro."""
+    """Scores ad copy across 6 dimensions using Gemini 2.5 Pro."""
 
     def __init__(self, client: genai.Client | None = None) -> None:
         if client is not None:
@@ -59,7 +60,7 @@ class EvaluationEngine:
     # ------------------------------------------------------------------
 
     def evaluate_iteration(self, ad_copy: AdCopy) -> EvaluationResult:
-        """Score all 5 dimensions in a single API call (fast mode)."""
+        """Score all 6 dimensions in a single API call (fast mode)."""
         log_decision(
             "evaluator",
             "evaluate_iteration_start",
@@ -96,7 +97,7 @@ class EvaluationEngine:
         return self._compute_result(ad_copy.id, scores, token_count, mode="iteration")
 
     def evaluate_final(self, ad_copy: AdCopy) -> EvaluationResult:
-        """Score each dimension in a separate API call (precise mode)."""
+        """Score each of 6 dimensions in a separate API call (precise mode)."""
         log_decision(
             "evaluator",
             "evaluate_final_start",
@@ -253,7 +254,8 @@ class EvaluationEngine:
         *,
         mode: str,
     ) -> EvaluationResult:
-        """Apply weighted average, hard gate, and threshold check."""
+        """Apply weighted average, hard gates (brand_voice < 5, pedagogical_integrity < 6),
+        and threshold check."""
         weighted_avg = round(
             sum(s.score * DIMENSION_WEIGHTS[s.dimension] for s in scores),
             4,
@@ -268,6 +270,15 @@ class EvaluationEngine:
                     "hard_gate_triggered",
                     f"brand_voice score {s.score:.1f} < hard gate {BRAND_VOICE_HARD_GATE}",
                     {"ad_id": ad_id, "score": s.score, "gate": BRAND_VOICE_HARD_GATE},
+                )
+            if s.dimension == "pedagogical_integrity" and s.score < PEDAGOGICAL_INTEGRITY_HARD_GATE:
+                hard_gate_failures.append("pedagogical_integrity")
+                log_decision(
+                    "evaluator",
+                    "hard_gate_triggered",
+                    f"pedagogical_integrity score {s.score:.1f} "
+                    f"< hard gate {PEDAGOGICAL_INTEGRITY_HARD_GATE}",
+                    {"ad_id": ad_id, "score": s.score, "gate": PEDAGOGICAL_INTEGRITY_HARD_GATE},
                 )
 
         passed = weighted_avg >= PASSING_THRESHOLD and len(hard_gate_failures) == 0

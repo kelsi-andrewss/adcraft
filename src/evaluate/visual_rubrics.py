@@ -1,6 +1,6 @@
 """Visual evaluation rubrics and scoring constants for AdCraft.
 
-Defines three visual evaluation dimensions, their rubric text, CoT
+Defines four visual evaluation dimensions, their rubric text, CoT
 multimodal prompt templates, few-shot examples, weights, and JSON
 schemas for structured output.
 
@@ -17,9 +17,10 @@ from src.theme import THEME
 # -------------------------------------------------------------------
 
 VISUAL_DIMENSION_WEIGHTS: dict[str, float] = {
-    "brand_consistency": 0.40,
-    "composition_quality": 0.30,
-    "text_image_synergy": 0.30,
+    "brand_consistency": 0.30,
+    "composition_quality": 0.225,
+    "text_image_synergy": 0.225,
+    "instructional_clarity": 0.25,
 }
 
 VISUAL_DIMENSIONS: list[str] = list(VISUAL_DIMENSION_WEIGHTS.keys())
@@ -184,6 +185,53 @@ VISUAL_RUBRICS: dict[str, str] = {
         "is a 5-6, not a 7-8. Only pairings where the image genuinely\n"
         "amplifies the copy's specific message deserve 7+."
     ),
+    "instructional_clarity": (
+        "INSTRUCTIONAL CLARITY "
+        "-- Does the image provide cognitive support for learning concepts?\n"
+        "\n"
+        "Evaluate whether the image reinforces the educational context of\n"
+        "the ad. The strongest educational images serve as pedagogical aids\n"
+        "themselves, helping the viewer understand or feel the learning\n"
+        "experience being offered.\n"
+        "\n"
+        "Criteria:\n"
+        "- Educational relevance (image connects to the learning domain)\n"
+        "- Cognitive support (image aids understanding, not just decoration)\n"
+        "- Learning moment depiction (captures the process or result of\n"
+        "  learning)\n"
+        "- Pedagogical authenticity (image reflects real learning, not\n"
+        "  staged/generic education stock)\n"
+        "\n"
+        "1-3 (Poor): Image contradicts or ignores the educational context.\n"
+        "  Generic stock photo with no connection to learning or tutoring.\n"
+        "  The image could accompany any product ad -- nothing signals\n"
+        "  education, learning, or academic growth.\n"
+        "\n"
+        "4-6 (Adequate): Generic educational imagery -- books, graduation\n"
+        "  caps, classrooms -- that signals 'education' without adding\n"
+        "  cognitive value. The image says 'this is about school' but\n"
+        "  doesn't help the viewer understand the tutoring experience.\n"
+        "\n"
+        "7-8 (Strong): Image reinforces subject understanding or the\n"
+        "  tutoring relationship. Shows learning-in-progress moments,\n"
+        "  visible progress indicators, or tutor-student interaction\n"
+        "  that demonstrates the pedagogical approach. The viewer can\n"
+        "  see what the learning experience looks like.\n"
+        "\n"
+        "9-10 (Exceptional): Image serves as a pedagogical aid itself.\n"
+        "  Visual metaphor for concept mastery, the tutoring relationship,\n"
+        "  or the transformation from confusion to understanding. The\n"
+        "  image makes the viewer feel the 'Aha!' moment or envision\n"
+        "  themselves in a productive learning experience.\n"
+        "\n"
+        "First describe what you observe in the image, then assess how\n"
+        "well it supports the educational message against each criterion\n"
+        "above, then score.\n"
+        "\n"
+        "Do NOT inflate scores. A generic educational image (books on a\n"
+        "desk, graduation cap) is a 4-6, not a 7-8. Only images that\n"
+        "actively reinforce the learning experience deserve 7+."
+    ),
 }
 
 # -------------------------------------------------------------------
@@ -289,6 +337,36 @@ VISUAL_FEW_SHOT_EXAMPLES: dict[str, str] = {
         "pairing would undermine the ad's message and confuse the viewer.\n"
         "Score: 2"
     ),
+    "instructional_clarity": (
+        "Example 1 (Score: 8):\n"
+        "Image description: A tutor and student sitting together at a\n"
+        "clean desk, working through a math problem on a whiteboard. The\n"
+        "student is pointing at a specific step while the tutor nods\n"
+        "encouragingly. A progress chart on the wall shows score\n"
+        "improvement over time. The lighting is warm and focused on\n"
+        "the working area.\n"
+        "Rationale: Strong instructional clarity. The image shows a real\n"
+        "learning moment -- the student is actively engaged with the\n"
+        "material, not just posed. The visible progress chart reinforces\n"
+        "the concept of measurable improvement. The tutor-student dynamic\n"
+        "is authentic and demonstrates personalized instruction. A viewer\n"
+        "can envision themselves in this learning scenario.\n"
+        "Score: 8\n"
+        "\n"
+        "Example 2 (Score: 3):\n"
+        "Image description: A stock photo of a graduation cap sitting on\n"
+        "top of a stack of textbooks against a plain white background.\n"
+        "No people, no learning context, no interaction. The image is\n"
+        "clean but generic.\n"
+        "Rationale: Zero instructional clarity. A graduation cap on books\n"
+        "is the most generic 'education' visual possible -- it signals\n"
+        "the category but provides no cognitive support. There's no\n"
+        "learning moment, no tutoring relationship, no pedagogical\n"
+        "context. This image could accompany any education ad from any\n"
+        "company and adds nothing to the viewer's understanding of the\n"
+        "tutoring experience.\n"
+        "Score: 3"
+    ),
 }
 
 # -------------------------------------------------------------------
@@ -330,7 +408,7 @@ VISUAL_ALL_DIMENSIONS_PROMPT = (
     "You are an expert visual advertising evaluator assessing an ad\n"
     f"creative for {THEME.brand_name}, a leading online learning platform.\n"
     "\n"
-    "Evaluate this ad's image across ALL 3 visual dimensions below.\n"
+    "Evaluate this ad's image across ALL 4 visual dimensions below.\n"
     "For EACH dimension, first describe your observations, then assess\n"
     "against the rubric criteria, then provide a score (1-10).\n"
     "\n"
@@ -353,7 +431,7 @@ VISUAL_ALL_DIMENSIONS_PROMPT = (
     "For each dimension, provide your observations and rationale FIRST,\n"
     "then your score.\n"
     "\n"
-    "Respond with JSON containing scores for all 3 visual dimensions,\n"
+    "Respond with JSON containing scores for all 4 visual dimensions,\n"
     "matching the schema provided."
 )
 

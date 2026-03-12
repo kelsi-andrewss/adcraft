@@ -150,20 +150,22 @@ class TestMeanAbsoluteError:
                 "id": "mae-001",
                 "human_scores": {
                     "clarity": 8.0,
-                    "value_prop": 6.0,
+                    "learner_benefit": 6.0,
                     "cta_effectiveness": 7.0,
                     "brand_voice": 9.0,
-                    "emotional_resonance": 5.0,
+                    "student_empathy": 5.0,
+                    "pedagogical_integrity": 7.0,
                 },
             },
             {
                 "id": "mae-002",
                 "human_scores": {
                     "clarity": 6.0,
-                    "value_prop": 4.0,
+                    "learner_benefit": 4.0,
                     "cta_effectiveness": 5.0,
                     "brand_voice": 7.0,
-                    "emotional_resonance": 3.0,
+                    "student_empathy": 3.0,
+                    "pedagogical_integrity": 5.0,
                 },
             },
         ]
@@ -171,19 +173,21 @@ class TestMeanAbsoluteError:
             {
                 "llm_scores": {
                     "clarity": 7.0,
-                    "value_prop": 7.0,
+                    "learner_benefit": 7.0,
                     "cta_effectiveness": 6.0,
                     "brand_voice": 8.0,
-                    "emotional_resonance": 6.0,
+                    "student_empathy": 6.0,
+                    "pedagogical_integrity": 6.0,
                 },
             },
             {
                 "llm_scores": {
                     "clarity": 5.0,
-                    "value_prop": 5.0,
+                    "learner_benefit": 5.0,
                     "cta_effectiveness": 6.0,
                     "brand_voice": 6.0,
-                    "emotional_resonance": 4.0,
+                    "student_empathy": 4.0,
+                    "pedagogical_integrity": 4.0,
                 },
             },
         ]
@@ -192,14 +196,16 @@ class TestMeanAbsoluteError:
 
         # clarity: (|8-7| + |6-5|) / 2 = 1.0
         assert mae["clarity"] == pytest.approx(1.0, abs=0.001)
-        # value_prop: (|6-7| + |4-5|) / 2 = 1.0
-        assert mae["value_prop"] == pytest.approx(1.0, abs=0.001)
+        # learner_benefit: (|6-7| + |4-5|) / 2 = 1.0
+        assert mae["learner_benefit"] == pytest.approx(1.0, abs=0.001)
         # cta_effectiveness: (|7-6| + |5-6|) / 2 = 1.0
         assert mae["cta_effectiveness"] == pytest.approx(1.0, abs=0.001)
         # brand_voice: (|9-8| + |7-6|) / 2 = 1.0
         assert mae["brand_voice"] == pytest.approx(1.0, abs=0.001)
-        # emotional_resonance: (|5-6| + |3-4|) / 2 = 1.0
-        assert mae["emotional_resonance"] == pytest.approx(1.0, abs=0.001)
+        # student_empathy: (|5-6| + |3-4|) / 2 = 1.0
+        assert mae["student_empathy"] == pytest.approx(1.0, abs=0.001)
+        # pedagogical_integrity: (|7-6| + |5-4|) / 2 = 1.0
+        assert mae["pedagogical_integrity"] == pytest.approx(1.0, abs=0.001)
 
     def test_mae_with_asymmetric_errors(self):
         """MAE correctly handles different error magnitudes per dimension."""
@@ -208,10 +214,11 @@ class TestMeanAbsoluteError:
                 "id": "asym-001",
                 "human_scores": {
                     "clarity": 9.0,
-                    "value_prop": 3.0,
+                    "learner_benefit": 3.0,
                     "cta_effectiveness": 7.0,
                     "brand_voice": 5.0,
-                    "emotional_resonance": 8.0,
+                    "student_empathy": 8.0,
+                    "pedagogical_integrity": 6.0,
                 },
             },
         ]
@@ -219,10 +226,11 @@ class TestMeanAbsoluteError:
             {
                 "llm_scores": {
                     "clarity": 7.0,  # error 2
-                    "value_prop": 5.0,  # error 2
+                    "learner_benefit": 5.0,  # error 2
                     "cta_effectiveness": 7.0,  # error 0
                     "brand_voice": 8.0,  # error 3
-                    "emotional_resonance": 6.0,  # error 2
+                    "student_empathy": 6.0,  # error 2
+                    "pedagogical_integrity": 6.0,  # error 0
                 },
             },
         ]
@@ -230,10 +238,11 @@ class TestMeanAbsoluteError:
         _alpha, _rho, mae = calculate_metrics(gold_ads, eval_results)
 
         assert mae["clarity"] == pytest.approx(2.0, abs=0.001)
-        assert mae["value_prop"] == pytest.approx(2.0, abs=0.001)
+        assert mae["learner_benefit"] == pytest.approx(2.0, abs=0.001)
         assert mae["cta_effectiveness"] == pytest.approx(0.0, abs=0.001)
         assert mae["brand_voice"] == pytest.approx(3.0, abs=0.001)
-        assert mae["emotional_resonance"] == pytest.approx(2.0, abs=0.001)
+        assert mae["student_empathy"] == pytest.approx(2.0, abs=0.001)
+        assert mae["pedagogical_integrity"] == pytest.approx(0.0, abs=0.001)
 
     def test_mae_values_are_rounded_to_3_decimals(self):
         """calculate_metrics rounds MAE to 3 decimal places."""
@@ -310,7 +319,6 @@ class TestOverlapGuard:
         first_dim = DIMENSIONS[0]
         # Extract a substring that actually appears in the few-shot example string
         example_str = FEW_SHOT_EXAMPLES[first_dim]
-        # Find a chunk of real ad text within the example
         # The clarity example contains this ref-great-001 text
         contaminated_text = (
             "Your child's SAT score shouldn't be limited by access to great teaching."

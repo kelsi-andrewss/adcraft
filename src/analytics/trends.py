@@ -21,10 +21,11 @@ TEMPLATE = "plotly_white"
 
 DIMENSION_COLORS = {
     "clarity": "#17E2EA",
-    "value_prop": "#1B9E77",
+    "learner_benefit": "#1B9E77",
     "cta_effectiveness": "#7570B3",
     "brand_voice": "#E7298A",
-    "emotional_resonance": "#D95F02",
+    "student_empathy": "#D95F02",
+    "pedagogical_integrity": "#66A61E",
 }
 
 
@@ -59,11 +60,12 @@ def score_distribution(db_conn: sqlite3.Connection) -> go.Figure:
         """
         SELECT e.ad_id,
                SUM(e.score * CASE e.dimension
-                   WHEN 'clarity' THEN 0.25
-                   WHEN 'value_prop' THEN 0.25
-                   WHEN 'cta_effectiveness' THEN 0.20
-                   WHEN 'brand_voice' THEN 0.15
-                   WHEN 'emotional_resonance' THEN 0.15
+                   WHEN 'clarity' THEN 0.20
+                   WHEN 'learner_benefit' THEN 0.20
+                   WHEN 'cta_effectiveness' THEN 0.16
+                   WHEN 'brand_voice' THEN 0.12
+                   WHEN 'student_empathy' THEN 0.12
+                   WHEN 'pedagogical_integrity' THEN 0.20
                    ELSE 0 END) as weighted_avg
         FROM evaluations e
         WHERE e.eval_mode = 'final' OR e.eval_mode IS NULL

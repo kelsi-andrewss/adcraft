@@ -38,15 +38,16 @@ SAMPLE_AD = AdCopy(
 def _passing_eval(ad_id: str = "") -> EvaluationResult:
     scores = [
         DimensionScore(dimension="clarity", score=8.0, rationale="clear"),
-        DimensionScore(dimension="value_prop", score=7.5, rationale="strong"),
+        DimensionScore(dimension="learner_benefit", score=7.5, rationale="strong"),
         DimensionScore(dimension="cta_effectiveness", score=7.0, rationale="good"),
         DimensionScore(dimension="brand_voice", score=7.0, rationale="on brand"),
-        DimensionScore(dimension="emotional_resonance", score=7.0, rationale="resonant"),
+        DimensionScore(dimension="student_empathy", score=7.0, rationale="resonant"),
+        DimensionScore(dimension="pedagogical_integrity", score=7.5, rationale="sound"),
     ]
     return EvaluationResult(
         ad_id=ad_id,
         scores=scores,
-        weighted_average=7.4,
+        weighted_average=7.34,
         passed_threshold=True,
         evaluator_model="gemini-2.5-pro",
         token_count=50,
@@ -56,10 +57,11 @@ def _passing_eval(ad_id: str = "") -> EvaluationResult:
 def _failing_eval(ad_id: str = "") -> EvaluationResult:
     scores = [
         DimensionScore(dimension="clarity", score=4.0, rationale="unclear"),
-        DimensionScore(dimension="value_prop", score=4.0, rationale="weak"),
+        DimensionScore(dimension="learner_benefit", score=4.0, rationale="weak"),
         DimensionScore(dimension="cta_effectiveness", score=4.0, rationale="poor"),
         DimensionScore(dimension="brand_voice", score=4.0, rationale="off"),
-        DimensionScore(dimension="emotional_resonance", score=4.0, rationale="flat"),
+        DimensionScore(dimension="student_empathy", score=4.0, rationale="flat"),
+        DimensionScore(dimension="pedagogical_integrity", score=4.0, rationale="misleading"),
     ]
     return EvaluationResult(
         ad_id=ad_id,

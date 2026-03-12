@@ -64,6 +64,7 @@ def _make_visual_all_dimensions_response(
         "brand_consistency": 7.5,
         "composition_quality": 6.0,
         "text_image_synergy": 8.0,
+        "instructional_clarity": 7.0,
     }
     if scores:
         default_scores.update(scores)
@@ -105,7 +106,7 @@ def test_build_visual_single_dimension_prompt_contains_rubric():
 
 
 def test_build_visual_all_dimensions_prompt_contains_all_rubrics():
-    """All-dimensions builder includes all 3 dimension names."""
+    """All-dimensions builder includes all 4 dimension names."""
     prompt = build_visual_all_dimensions_prompt()
     for dim in VISUAL_DIMENSIONS:
         assert dim.upper() in prompt
@@ -124,7 +125,7 @@ def test_visual_dimension_weights_sum_to_one():
 
 @patch("src.evaluate.engine.log_decision")
 def test_evaluate_visual_iteration_mode(mock_log, test_image, test_ad_copy):
-    """Iteration mode returns 3 DimensionScore objects with correct dimension names."""
+    """Iteration mode returns 4 DimensionScore objects with correct dimension names."""
     mock_client = MagicMock()
     response_data = _make_visual_all_dimensions_response()
     mock_client.models.generate_content.return_value = _mock_response(response_data)
@@ -132,14 +133,14 @@ def test_evaluate_visual_iteration_mode(mock_log, test_image, test_ad_copy):
     engine = _make_engine(mock_client)
     scores = engine.evaluate_visual(test_image, test_ad_copy, eval_mode="iteration")
 
-    assert len(scores) == 3
+    assert len(scores) == 4
     dims_returned = {s.dimension for s in scores}
     assert dims_returned == set(VISUAL_DIMENSIONS)
 
 
 @patch("src.evaluate.engine.log_decision")
 def test_evaluate_visual_final_mode(mock_log, test_image, test_ad_copy):
-    """Final mode makes 3 separate API calls, one per visual dimension."""
+    """Final mode makes 4 separate API calls, one per visual dimension."""
     mock_client = MagicMock()
     responses = [
         _mock_response(_make_visual_single_dimension_response(dim, 7.0))
@@ -150,15 +151,15 @@ def test_evaluate_visual_final_mode(mock_log, test_image, test_ad_copy):
     engine = _make_engine(mock_client)
     scores = engine.evaluate_visual(test_image, test_ad_copy, eval_mode="final")
 
-    assert len(scores) == 3
-    assert mock_client.models.generate_content.call_count == 3
+    assert len(scores) == 4
+    assert mock_client.models.generate_content.call_count == 4
     dims_returned = {s.dimension for s in scores}
     assert dims_returned == set(VISUAL_DIMENSIONS)
 
 
 @patch("src.evaluate.engine.log_decision")
 def test_evaluate_visual_iteration_single_api_call(mock_log, test_image, test_ad_copy):
-    """Iteration mode uses exactly 1 API call for all 3 dimensions."""
+    """Iteration mode uses exactly 1 API call for all 4 dimensions."""
     mock_client = MagicMock()
     response_data = _make_visual_all_dimensions_response()
     mock_client.models.generate_content.return_value = _mock_response(response_data)

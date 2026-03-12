@@ -42,10 +42,11 @@ def _make_all_dimensions_response(
     """Build a mock all-dimensions JSON response."""
     default_scores = {
         "clarity": 7.0,
-        "value_prop": 8.0,
+        "learner_benefit": 8.0,
         "cta_effectiveness": 7.0,
         "brand_voice": 8.0,
-        "emotional_resonance": 7.0,
+        "student_empathy": 7.0,
+        "pedagogical_integrity": 7.0,
     }
     if scores:
         default_scores.update(scores)
@@ -90,7 +91,7 @@ def _make_engine(mock_client: MagicMock | None = None) -> EvaluationEngine:
 
 @patch("src.evaluate.engine.log_decision")
 def test_iteration_mode_returns_all_dimensions(mock_log):
-    """Iteration mode returns scores for all 5 dimensions."""
+    """Iteration mode returns scores for all 6 dimensions."""
     mock_client = MagicMock()
     response_data = _make_all_dimensions_response()
     mock_client.models.generate_content.return_value = _mock_response(response_data)
@@ -98,7 +99,7 @@ def test_iteration_mode_returns_all_dimensions(mock_log):
     engine = _make_engine(mock_client)
     result = engine.evaluate_iteration(_make_ad())
 
-    assert len(result.scores) == 5
+    assert len(result.scores) == 6
     dims_returned = {s.dimension for s in result.scores}
     assert dims_returned == set(DIMENSIONS)
     # Single API call in iteration mode
@@ -112,7 +113,7 @@ def test_iteration_mode_returns_all_dimensions(mock_log):
 
 @patch("src.evaluate.engine.log_decision")
 def test_final_mode_makes_separate_calls(mock_log):
-    """Final mode makes 5 separate API calls, one per dimension."""
+    """Final mode makes 6 separate API calls, one per dimension."""
     mock_client = MagicMock()
 
     responses = []
@@ -123,8 +124,8 @@ def test_final_mode_makes_separate_calls(mock_log):
     engine = _make_engine(mock_client)
     result = engine.evaluate_final(_make_ad())
 
-    assert len(result.scores) == 5
-    assert mock_client.models.generate_content.call_count == 5
+    assert len(result.scores) == 6
+    assert mock_client.models.generate_content.call_count == 6
 
 
 # ---------------------------------------------------------------------------
@@ -137,10 +138,11 @@ def test_weighted_average_calculation(mock_log):
     """Weighted average matches manual calculation."""
     scores = {
         "clarity": 8.0,
-        "value_prop": 6.0,
+        "learner_benefit": 6.0,
         "cta_effectiveness": 7.0,
         "brand_voice": 9.0,
-        "emotional_resonance": 5.0,
+        "student_empathy": 5.0,
+        "pedagogical_integrity": 7.0,
     }
     expected = sum(scores[d] * DIMENSION_WEIGHTS[d] for d in DIMENSIONS)
 
@@ -155,7 +157,7 @@ def test_weighted_average_calculation(mock_log):
 
 
 # ---------------------------------------------------------------------------
-# Tests: hard gate
+# Tests: hard gate — brand_voice
 # ---------------------------------------------------------------------------
 
 
@@ -164,10 +166,11 @@ def test_hard_gate_brand_voice_below_5_fails(mock_log):
     """brand_voice < 5 triggers hard gate failure regardless of other scores."""
     scores = {
         "clarity": 9.0,
-        "value_prop": 9.0,
+        "learner_benefit": 9.0,
         "cta_effectiveness": 9.0,
         "brand_voice": 4.0,  # Below hard gate
-        "emotional_resonance": 9.0,
+        "student_empathy": 9.0,
+        "pedagogical_integrity": 9.0,
     }
 
     mock_client = MagicMock()
@@ -188,10 +191,11 @@ def test_hard_gate_brand_voice_at_5_passes(mock_log):
     """brand_voice == 5 (at the gate) does NOT trigger hard gate."""
     scores = {
         "clarity": 7.5,
-        "value_prop": 7.5,
+        "learner_benefit": 7.5,
         "cta_effectiveness": 7.5,
         "brand_voice": 5.0,  # At the gate — should pass
-        "emotional_resonance": 7.5,
+        "student_empathy": 7.5,
+        "pedagogical_integrity": 7.5,
     }
 
     mock_client = MagicMock()
@@ -203,6 +207,83 @@ def test_hard_gate_brand_voice_at_5_passes(mock_log):
 
     assert result.hard_gate_failures == []
     assert result.passed_threshold is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: hard gate — pedagogical_integrity
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+def test_hard_gate_pedagogical_integrity_below_6_fails(mock_log):
+    """pedagogical_integrity < 6 triggers hard gate failure."""
+    scores = {
+        "clarity": 9.0,
+        "learner_benefit": 9.0,
+        "cta_effectiveness": 9.0,
+        "brand_voice": 9.0,
+        "student_empathy": 9.0,
+        "pedagogical_integrity": 5.9,  # Below hard gate of 6
+    }
+
+    mock_client = MagicMock()
+    response_data = _make_all_dimensions_response(scores)
+    mock_client.models.generate_content.return_value = _mock_response(response_data)
+
+    engine = _make_engine(mock_client)
+    result = engine.evaluate_iteration(_make_ad())
+
+    assert result.passed_threshold is False
+    assert "pedagogical_integrity" in result.hard_gate_failures
+    assert result.weighted_average > PASSING_THRESHOLD
+
+
+@patch("src.evaluate.engine.log_decision")
+def test_hard_gate_pedagogical_integrity_at_6_passes(mock_log):
+    """pedagogical_integrity == 6 (at the gate) does NOT trigger hard gate."""
+    scores = {
+        "clarity": 7.5,
+        "learner_benefit": 7.5,
+        "cta_effectiveness": 7.5,
+        "brand_voice": 7.5,
+        "student_empathy": 7.5,
+        "pedagogical_integrity": 6.0,
+    }
+
+    mock_client = MagicMock()
+    response_data = _make_all_dimensions_response(scores)
+    mock_client.models.generate_content.return_value = _mock_response(response_data)
+
+    engine = _make_engine(mock_client)
+    result = engine.evaluate_iteration(_make_ad())
+
+    assert "pedagogical_integrity" not in result.hard_gate_failures
+    assert result.passed_threshold is True
+
+
+@patch("src.evaluate.engine.log_decision")
+def test_dual_hard_gate_failure(mock_log):
+    """Both brand_voice and pedagogical_integrity can fail simultaneously."""
+    scores = {
+        "clarity": 9.0,
+        "learner_benefit": 9.0,
+        "cta_effectiveness": 9.0,
+        "brand_voice": 4.0,  # Below brand_voice gate of 5
+        "student_empathy": 9.0,
+        "pedagogical_integrity": 5.9,  # Below pedagogical_integrity gate of 6
+    }
+
+    mock_client = MagicMock()
+    response_data = _make_all_dimensions_response(scores)
+    mock_client.models.generate_content.return_value = _mock_response(response_data)
+
+    engine = _make_engine(mock_client)
+    result = engine.evaluate_iteration(_make_ad())
+
+    assert result.passed_threshold is False
+    assert "brand_voice" in result.hard_gate_failures
+    assert "pedagogical_integrity" in result.hard_gate_failures
+    assert len(result.hard_gate_failures) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +343,7 @@ def test_retry_on_api_error(mock_log):
     engine = _make_engine(mock_client)
     result = engine.evaluate_iteration(_make_ad())
 
-    assert len(result.scores) == 5
+    assert len(result.scores) == 6
     assert mock_client.models.generate_content.call_count == 2
 
 
@@ -324,8 +405,8 @@ def test_log_decision_called(mock_log):
     engine = _make_engine(mock_client)
     engine.evaluate_iteration(_make_ad())
 
-    # Should have: evaluate_iteration_start + 5 dimension_scores + evaluation_complete = 7
-    assert mock_log.call_count >= 7
+    # Should have: evaluate_iteration_start + 6 dimension_scores + evaluation_complete = 8
+    assert mock_log.call_count >= 8
 
     # Check that evaluator component was used
     components = [call.args[0] for call in mock_log.call_args_list]
@@ -333,7 +414,7 @@ def test_log_decision_called(mock_log):
 
     # Check that dimension scores were logged
     actions = [call.args[1] for call in mock_log.call_args_list]
-    assert actions.count("dimension_score") == 5
+    assert actions.count("dimension_score") == 6
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +439,7 @@ def test_token_count_captured(mock_log):
 
 @patch("src.evaluate.engine.log_decision")
 def test_final_mode_accumulates_tokens(mock_log):
-    """Final mode accumulates token counts from all 5 calls."""
+    """Final mode accumulates token counts from all 6 calls."""
     mock_client = MagicMock()
     responses = []
     for dim in DIMENSIONS:
@@ -370,7 +451,7 @@ def test_final_mode_accumulates_tokens(mock_log):
     engine = _make_engine(mock_client)
     result = engine.evaluate_final(_make_ad())
 
-    assert result.token_count == 1000  # 200 * 5
+    assert result.token_count == 1200  # 200 * 6
 
 
 # ---------------------------------------------------------------------------

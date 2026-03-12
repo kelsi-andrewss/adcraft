@@ -14,6 +14,7 @@ from src.evaluate.rubrics import DIMENSIONS, PASSING_THRESHOLD
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 from src.models.evaluation import EvaluationResult
+from src.theme import THEME
 
 
 @dataclass
@@ -28,21 +29,26 @@ class InterventionPlan:
 # Dimension-specific intervention strategies keyed by actual dimension names
 INTERVENTION_STRATEGIES: dict[str, str] = {
     "clarity": ("Simplify sentence structure. Remove jargon. One idea per sentence."),
-    "value_prop": (
-        "Sharpen the specific benefit. What does the student/parent get "
-        "that competitors don't offer?"
+    "learner_benefit": (
+        "Sharpen the specific learning outcome. What transformation does the student "
+        "experience that competitors can't deliver?"
     ),
     "cta_effectiveness": (
         "Use a stronger action verb. Create urgency without being pushy. "
         "Be specific about next step."
     ),
     "brand_voice": (
-        "Match Varsity Tutors' tone: confident, warm, expert but approachable. "
+        f"Match {THEME.brand_name}'s tone: confident, warm, expert but approachable. "
         "Avoid corporate stiffness."
     ),
-    "emotional_resonance": (
+    "student_empathy": (
         "Connect to the parent's anxiety about their child's future or the "
         "student's desire to succeed. Be specific, not generic."
+    ),
+    "pedagogical_integrity": (
+        "Ensure claims align with sound educational principles. Remove any guaranteed "
+        "outcomes, shortcut promises, or learning-without-effort language. Emphasize "
+        "personalized, expert-guided learning processes."
     ),
 }
 
@@ -95,8 +101,8 @@ class SelfHealer:
     def diagnose(self, evaluation: EvaluationResult) -> str:
         """Identify the weakest dimension from evaluation scores.
 
-        Tie-breaking: prefer hard-gated dimensions (brand_voice) over others,
-        then pick the first in DIMENSIONS order.
+        Tie-breaking: prefer any hard-gated dimension (brand_voice or
+        pedagogical_integrity) over non-gated, then DIMENSIONS order.
         """
         scores_by_dim = {s.dimension: s.score for s in evaluation.scores}
 
@@ -109,9 +115,10 @@ class SelfHealer:
         if len(tied) == 1:
             weakest = tied[0]
         else:
-            # Prefer hard-gated dimension (brand_voice) in ties
-            if "brand_voice" in tied:
-                weakest = "brand_voice"
+            # Prefer hard-gated dimensions in ties
+            hard_gated = [d for d in tied if d in ("brand_voice", "pedagogical_integrity")]
+            if hard_gated:
+                weakest = hard_gated[0]
             else:
                 # Fall back to DIMENSIONS order
                 weakest = next(d for d in DIMENSIONS if d in tied)
@@ -137,9 +144,13 @@ class SelfHealer:
             f"Improve the {dimension} dimension of this ad.",
         )
 
-        # Severity: major if the dimension is hard-gated (brand_voice)
+        # Severity: major if the dimension is hard-gated (brand_voice, pedagogical_integrity)
         # or if it's one of the high-weight dimensions
-        severity = "major" if dimension in ("brand_voice", "clarity", "value_prop") else "minor"
+        severity = (
+            "major"
+            if dimension in ("brand_voice", "clarity", "learner_benefit", "pedagogical_integrity")
+            else "minor"
+        )
 
         plan = InterventionPlan(
             dimension=dimension,

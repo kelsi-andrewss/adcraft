@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS quality_snapshots (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TABLE IF EXISTS calibration_runs;
 CREATE TABLE IF NOT EXISTS calibration_runs (
     id TEXT PRIMARY KEY,
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -82,10 +83,11 @@ CREATE TABLE IF NOT EXISTS calibration_runs (
     alpha_overall REAL,
     spearman_rho REAL,
     mae_clarity REAL,
-    mae_value_prop REAL,
+    mae_learner_benefit REAL,
     mae_cta_effectiveness REAL,
     mae_brand_voice REAL,
-    mae_emotional_resonance REAL,
+    mae_student_empathy REAL,
+    mae_pedagogical_integrity REAL,
     ad_count INTEGER,
     passed INTEGER NOT NULL DEFAULT 0,
     details_json TEXT

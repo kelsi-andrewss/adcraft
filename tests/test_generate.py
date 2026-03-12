@@ -13,6 +13,7 @@ import pytest
 from src.generate.engine import GENERATION_SCHEMA, GenerationEngine
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
+from src.theme import THEME
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -230,6 +231,53 @@ def test_prompt_includes_brand_voice_examples(mock_log):
     assert "Break Through Your SAT Score Ceiling" in prompt
     # Should contain brand voice guidelines
     assert "Supportive and encouraging" in prompt
+    # Should contain THEME.brand_name
+    assert THEME.brand_name in prompt
+
+
+@patch("src.generate.engine.log_decision")
+def test_prompt_contains_no_varsity_tutors(mock_log):
+    """Prompt must not contain hardcoded 'Varsity Tutors'."""
+    mock_client = MagicMock()
+    response_data = _make_generation_response()
+    mock_client.models.generate_content.return_value = _mock_response(response_data)
+
+    engine = _make_engine(mock_client)
+    engine.generate(_make_brief())
+
+    call_args = mock_client.models.generate_content.call_args
+    prompt = call_args.kwargs.get("contents") or call_args[1].get("contents")
+    assert "Varsity Tutors" not in prompt
+
+
+@patch("src.generate.engine.log_decision")
+def test_prompt_contains_theme_brand_name(mock_log):
+    """Prompt must contain THEME.brand_name."""
+    mock_client = MagicMock()
+    response_data = _make_generation_response()
+    mock_client.models.generate_content.return_value = _mock_response(response_data)
+
+    engine = _make_engine(mock_client)
+    engine.generate(_make_brief())
+
+    call_args = mock_client.models.generate_content.call_args
+    prompt = call_args.kwargs.get("contents") or call_args[1].get("contents")
+    assert THEME.brand_name in prompt
+
+
+@patch("src.generate.engine.log_decision")
+def test_prompt_contains_pedagogical_north_star(mock_log):
+    """Prompt must contain the Pedagogical North Star section."""
+    mock_client = MagicMock()
+    response_data = _make_generation_response()
+    mock_client.models.generate_content.return_value = _mock_response(response_data)
+
+    engine = _make_engine(mock_client)
+    engine.generate(_make_brief())
+
+    call_args = mock_client.models.generate_content.call_args
+    prompt = call_args.kwargs.get("contents") or call_args[1].get("contents")
+    assert "Pedagogical North Star" in prompt
 
 
 # ---------------------------------------------------------------------------

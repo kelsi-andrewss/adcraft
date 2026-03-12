@@ -111,10 +111,11 @@ class TestComputeQualitySnapshot:
         )
         for dim, score in [
             ("clarity", 8.0),
-            ("value_prop", 7.0),
+            ("learner_benefit", 7.0),
             ("cta_effectiveness", 7.5),
             ("brand_voice", 8.0),
-            ("emotional_resonance", 7.0),
+            ("student_empathy", 7.0),
+            ("pedagogical_integrity", 7.5),
         ]:
             insert_evaluation(
                 db_conn,
@@ -351,7 +352,7 @@ class TestComputeCreativeUnitCost:
             cta_button="CTA",
             cost_usd=0.001,
         )
-        for dim in ["clarity", "value_prop", "brand_voice"]:
+        for dim in ["clarity", "learner_benefit", "brand_voice"]:
             insert_evaluation(db_conn, ad_id=ad_id, dimension=dim, score=7.0, cost_usd=0.003)
 
         result = compute_creative_unit_cost(db_conn, ad_id)
