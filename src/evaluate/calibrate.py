@@ -140,7 +140,7 @@ def calculate_metrics(
     return {
         "alpha": float(alpha_overall),
         "spearman_rho": float(rho),
-        "mae": round(mae, 3),
+        "mae": mae,
     }
 
 
