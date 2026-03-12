@@ -94,7 +94,7 @@ class TestBatchPipeline:
         pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
-        result = pipeline.run([SAMPLE_BRIEF])
+        result = pipeline.run([SAMPLE_BRIEF], no_images=True)
 
         assert result.total_briefs == 1
         assert result.passed == 1
@@ -130,7 +130,7 @@ class TestBatchPipeline:
         pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
-        result = pipeline.run([SAMPLE_BRIEF])
+        result = pipeline.run([SAMPLE_BRIEF], no_images=True)
 
         assert result.passed == 1
         assert result.total_cycles >= 2
@@ -186,7 +186,7 @@ class TestBatchPipeline:
         pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
-        result = pipeline.run([SAMPLE_BRIEF, SAMPLE_BRIEF])
+        result = pipeline.run([SAMPLE_BRIEF, SAMPLE_BRIEF], no_images=True)
 
         assert result.total_briefs == 2
         # At least one should have failed and one passed
@@ -208,7 +208,7 @@ class TestBatchPipeline:
         pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
-        pipeline.run([SAMPLE_BRIEF])
+        pipeline.run([SAMPLE_BRIEF], no_images=True)
 
         snapshots = list_quality_snapshots(db_conn)
         assert len(snapshots) >= 1
@@ -243,7 +243,7 @@ class TestBatchPipeline:
         pipeline._conn = db_conn
 
         briefs = [SAMPLE_BRIEF, SAMPLE_BRIEF, SAMPLE_BRIEF]
-        result = pipeline.run(briefs)
+        result = pipeline.run(briefs, no_images=True)
 
         assert result.total_briefs == 3
         assert result.passed + result.failed == result.total_briefs
@@ -263,7 +263,7 @@ class TestBatchPipeline:
         pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
-        pipeline.run([SAMPLE_BRIEF])
+        pipeline.run([SAMPLE_BRIEF], no_images=True)
 
         pipe_actions = [call.args[1] for call in mock_pipe_log.call_args_list]
 
@@ -289,7 +289,7 @@ class TestBatchPipeline:
         pipeline._controller = IterationController(mock_gen, mock_eval, SelfHealer(), db_conn)
         pipeline._conn = db_conn
 
-        result = pipeline.run([SAMPLE_BRIEF, SAMPLE_BRIEF])
+        result = pipeline.run([SAMPLE_BRIEF, SAMPLE_BRIEF], no_images=True)
 
         assert result.total_briefs == 2
         assert result.errors >= 1
