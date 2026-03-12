@@ -38,6 +38,25 @@ from src.models.calibration import CalibrationResult  # noqa: E402
 ALPHA_THRESHOLD = 0.67
 
 
+def check_gold_set_overlap(few_shot_path: Path, gold_set_path: Path) -> None:
+    """Guard against circular validation: IDs in few-shot file must not appear in gold set file.
+
+    Both files are JSON arrays of objects with an "id" field.
+    Raises ValueError listing overlapping IDs if any are found.
+    """
+    with open(few_shot_path) as f:
+        few_shot_ids = {item["id"] for item in json.load(f)}
+    with open(gold_set_path) as f:
+        gold_set_ids = {item["id"] for item in json.load(f)}
+
+    overlap = few_shot_ids & gold_set_ids
+    if overlap:
+        raise ValueError(
+            f"Overlap detected between few-shot and gold set ad IDs: {', '.join(sorted(overlap))}. "
+            f"Gold set must be held out from few-shot examples to avoid circular validation."
+        )
+
+
 def load_gold_set() -> list[dict]:
     """Load held-out gold set ads from JSON file."""
     path = Path("data/reference_ads/calibration_gold_set.json")
@@ -76,23 +95,70 @@ def check_overlap(gold_ads: list[dict]) -> None:
 
 
 def calculate_metrics(
+    human_scores: list[dict] | list[float],
+    llm_scores: list[dict] | list[float] | None = None,
+) -> dict[str, float]:
+    """Compute inter-rater reliability metrics between human and LLM scores.
+
+    Supports two calling conventions:
+      - calculate_metrics(gold_ads, eval_results): structured dicts with per-dimension scores
+      - calculate_metrics(human_flat, llm_flat): flat numeric lists (pure math, no extraction)
+
+    Returns dict with keys: alpha, spearman_rho, mae.
+    """
+    if llm_scores is None:
+        raise ValueError("llm_scores is required")
+
+    # Detect calling convention: flat numeric lists vs structured dicts
+    if human_scores and isinstance(human_scores[0], (int, float)):
+        human_flat = [float(x) for x in human_scores]
+        llm_flat = [float(x) for x in llm_scores]  # type: ignore[union-attr]
+    else:
+        # Structured dict mode (gold_ads + eval_results)
+        human_flat = []
+        llm_flat = []
+        for ad, result in zip(human_scores, llm_scores):  # type: ignore[arg-type]
+            h_scores = ad["human_scores"]
+            l_scores = result["llm_scores"]
+            for dim in DIMENSIONS:
+                human_flat.append(float(h_scores[dim]))
+                llm_flat.append(float(l_scores[dim]))
+
+    # Krippendorff's Alpha (ordinal) — 2 raters x N*D items
+    reliability_data = np.array([human_flat, llm_flat])
+    alpha_overall = krippendorff.alpha(
+        reliability_data=reliability_data,
+        level_of_measurement="ordinal",
+    )
+
+    # Spearman rank correlation
+    rho, _p_value = spearmanr(human_flat, llm_flat)
+
+    # Overall MAE
+    mae = sum(abs(h - m) for h, m in zip(human_flat, llm_flat)) / len(human_flat)
+
+    return {
+        "alpha": float(alpha_overall),
+        "spearman_rho": float(rho),
+        "mae": mae,
+    }
+
+
+def _calculate_metrics_structured(
     gold_ads: list[dict],
     eval_results: list[dict],
 ) -> tuple[float, float, dict[str, float]]:
-    """Compute inter-rater reliability metrics between human and LLM scores.
-
-    Returns (alpha_overall, spearman_rho, per_dimension_mae).
-    """
+    """Structured variant used by run_calibration(). Returns (alpha, rho, per_dim_mae)."""
     human_flat: list[float] = []
     llm_flat: list[float] = []
     per_dim_scores: dict[str, list[tuple[float, float]]] = {d: [] for d in DIMENSIONS}
 
     for ad, result in zip(gold_ads, eval_results):
-        human_scores = ad["human_scores"]
-        llm_scores = result["llm_scores"]
+        human_scores_d = ad["human_scores"]
+        llm_scores_d = result["llm_scores"]
         for dim in DIMENSIONS:
-            h_score = float(human_scores[dim])
-            llm_score = float(llm_scores[dim])
+            h_score = float(human_scores_d[dim])
+            llm_score = float(llm_scores_d[dim])
             human_flat.append(h_score)
             llm_flat.append(llm_score)
             per_dim_scores[dim].append((h_score, llm_score))
@@ -160,7 +226,7 @@ def run_calibration() -> CalibrationResult:
         )
 
     # Compute metrics
-    alpha, rho, per_dim_mae = calculate_metrics(gold_ads, eval_results)
+    alpha, rho, per_dim_mae = _calculate_metrics_structured(gold_ads, eval_results)
 
     # Print per-ad results table
     print("\n" + "=" * 70, flush=True)
