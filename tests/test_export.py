@@ -36,10 +36,11 @@ def seeded_db(db_conn):
     )
     for dim, score in [
         ("clarity", 8.0),
-        ("value_prop", 7.5),
+        ("learner_benefit", 7.5),
         ("cta_effectiveness", 7.0),
         ("brand_voice", 6.5),
-        ("emotional_resonance", 7.0),
+        ("student_empathy", 7.0),
+        ("pedagogical_integrity", 7.5),
     ]:
         insert_evaluation(
             db_conn,

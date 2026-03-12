@@ -23,6 +23,7 @@ from src.decisions.logger import log_decision
 from src.intel.analyzer import CompetitorPatterns
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
+from src.theme import THEME
 
 GENERATOR_MODEL = "gemini-2.5-flash"
 GENERATION_TEMPERATURE = 0.7
@@ -58,7 +59,7 @@ GENERATION_SCHEMA: dict = {
     "required": ["primary_text", "headline", "description", "cta_button"],
 }
 
-BRAND_VOICE_GUIDELINES = """VARSITY TUTORS BRAND VOICE:
+BRAND_VOICE_GUIDELINES = f"""{THEME.brand_name.upper()} BRAND VOICE:
 - Supportive and encouraging — we're a partner in the student's journey
 - Knowledgeable and confident — we have the expertise and results to prove it
 - Warm but professional — approachable without being unprofessional
@@ -66,14 +67,14 @@ BRAND_VOICE_GUIDELINES = """VARSITY TUTORS BRAND VOICE:
 - Never fear-based — no "DON'T FAIL", no anxiety manipulation, no false urgency
 - Authentic — real language that parents and students relate to, no corporate jargon"""
 
-FEW_SHOT_EXAMPLES = """EXAMPLE 1 (Parent-focused, strong):
-Primary text: "Your child's SAT score shouldn't be limited by access to great teaching. Varsity Tutors connects students with expert SAT tutors who've helped families like yours see an average 160-point score improvement. Our personalized 1-on-1 approach means your student gets a study plan built around their specific strengths and weaknesses -- not a one-size-fits-all program."
+FEW_SHOT_EXAMPLES = f"""EXAMPLE 1 (Parent-focused, strong):
+Primary text: "Your child's SAT score shouldn't be limited by access to great teaching. {THEME.brand_name} connects students with expert SAT tutors who've helped families like yours see an average 160-point score improvement. Our personalized 1-on-1 approach means your student gets a study plan built around their specific strengths and weaknesses -- not a one-size-fits-all program."
 Headline: "Average 160-Point SAT Score Improvement"
 Description: "Personalized 1-on-1 SAT tutoring from expert instructors. Join 3,000+ families who've seen real results."
 CTA: "Get Started"
 
 EXAMPLE 2 (Student-focused, strong):
-Primary text: "You've put in the work. You've taken the practice tests. But are you scoring where you want to be? Varsity Tutors matches you with an SAT expert who's scored in the 99th percentile and knows exactly how to help you break through your score ceiling. Real tutors, real strategies, real results."
+Primary text: "You've put in the work. You've taken the practice tests. But are you scoring where you want to be? {THEME.brand_name} matches you with an SAT expert who's scored in the 99th percentile and knows exactly how to help you break through your score ceiling. Real tutors, real strategies, real results."
 Headline: "Break Through Your SAT Score Ceiling"
 Description: "Work with 99th-percentile SAT tutors who know every trick in the book. Personalized strategies for your target score."
 CTA: "Find Your Tutor"
@@ -155,6 +156,7 @@ class GenerationEngine:
                 "headline": ad.headline,
                 "primary_text_len": len(ad.primary_text),
                 "token_count": token_count,
+                "pedagogical_context": "Pedagogical North Star principles applied",
             },
         )
 
@@ -196,14 +198,23 @@ class GenerationEngine:
         return brief.model_copy(update={"competitive_context": competitive_text})
 
     def _build_prompt(self, brief: AdBrief) -> str:
-        """Construct the generation prompt from brief details and guidelines."""
+        """Construct prompt with THEME.brand_name, PEDAGOGICAL_NORTH_STAR section,
+        brand voice guidelines, and few-shot examples."""
         competitive_section = ""
         if brief.competitive_context:
             competitive_section = f"\nCOMPETITIVE CONTEXT:\n{brief.competitive_context}\n"
 
-        return f"""You are an expert advertising copywriter for Varsity Tutors, creating a Facebook/Instagram ad for SAT test prep.
+        pedagogical_north_star = f"""PEDAGOGICAL NORTH STAR -- {THEME.brand_name}'s Pedagogical Principles:
+- Personalization at Scale: Every learner's path is unique. Ads must reflect individualized learning, not one-size-fits-all.
+- Expert-Led Instruction: Tutors are subject matter experts and skilled educators. Ads should convey credentialed expertise.
+- Active Learning: Learning is a process, not a transaction. Ads should frame education as a journey of growth, not a product to purchase.
+- Never promise outcomes without effort. No "guaranteed scores" or "learn tricks." Frame improvement as the result of guided, personalized work."""
+
+        return f"""You are an expert advertising copywriter for {THEME.brand_name}, creating a Facebook/Instagram ad for SAT test prep.
 
 {BRAND_VOICE_GUIDELINES}
+
+{pedagogical_north_star}
 
 {PLATFORM_CONSTRAINTS}
 
@@ -222,6 +233,7 @@ INSTRUCTIONS:
 4. The CTA should feel like a natural next step, not a hard sell.
 5. Stay on-brand: supportive, knowledgeable, warm, results-oriented.
 6. Do NOT use fear-based messaging, ALL CAPS, or false urgency.
+7. Align with the Pedagogical North Star — no guaranteed outcomes or shortcut promises.
 
 Generate the ad copy now."""
 

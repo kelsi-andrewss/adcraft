@@ -83,11 +83,13 @@ def _make_dimension_scores(
     brand: float = 7.0,
     composition: float = 7.0,
     synergy: float = 7.0,
+    instructional: float = 7.0,
 ) -> list[DimensionScore]:
     return [
         DimensionScore(dimension="brand_consistency", score=brand, rationale="ok"),
         DimensionScore(dimension="composition_quality", score=composition, rationale="ok"),
         DimensionScore(dimension="text_image_synergy", score=synergy, rationale="ok"),
+        DimensionScore(dimension="instructional_clarity", score=instructional, rationale="ok"),
     ]
 
 
@@ -334,12 +336,12 @@ class TestComputeVisualWeightedAverage:
     """Unit test for the weighted average helper."""
 
     def test_weighted_average_calculation(self):
-        """Weighted avg = 0.4*brand + 0.3*composition + 0.3*synergy."""
-        scores = _make_dimension_scores(brand=8.0, composition=6.0, synergy=10.0)
-        # 0.4*8 + 0.3*6 + 0.3*10 = 3.2 + 1.8 + 3.0 = 8.0
+        """Weighted avg = 0.30*brand + 0.225*comp + 0.225*synergy + 0.25*instr."""
+        scores = _make_dimension_scores(brand=8.0, composition=6.0, synergy=10.0, instructional=8.0)
+        # 0.30*8 + 0.225*6 + 0.225*10 + 0.25*8 = 2.4 + 1.35 + 2.25 + 2.0 = 8.0
         assert _compute_visual_weighted_average(scores) == 8.0
 
     def test_all_tens(self):
         """All 10s => weighted avg = 10.0."""
-        scores = _make_dimension_scores(brand=10.0, composition=10.0, synergy=10.0)
+        scores = _make_dimension_scores(brand=10.0, composition=10.0, synergy=10.0, instructional=10.0)
         assert _compute_visual_weighted_average(scores) == 10.0

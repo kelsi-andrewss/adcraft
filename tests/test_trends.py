@@ -68,10 +68,11 @@ class TestWithData:
             )
             for dim, score in [
                 ("clarity", 7.0 + i * 0.5),
-                ("value_prop", 6.5 + i * 0.3),
+                ("learner_benefit", 6.5 + i * 0.3),
                 ("cta_effectiveness", 7.0),
                 ("brand_voice", 6.0 + i),
-                ("emotional_resonance", 7.5),
+                ("student_empathy", 7.5),
+                ("pedagogical_integrity", 7.0 + i * 0.2),
             ]:
                 insert_evaluation(
                     db_conn,
@@ -93,7 +94,7 @@ class TestWithData:
             db_conn,
             cycle_number=1,
             avg_weighted_score=7.0,
-            dimension_averages={"clarity": 7.0, "value_prop": 6.5},
+            dimension_averages={"clarity": 7.0, "learner_benefit": 6.5},
             quality_per_dollar=100.0,
             token_spend_usd=0.07,
         )
@@ -101,7 +102,7 @@ class TestWithData:
             db_conn,
             cycle_number=2,
             avg_weighted_score=7.5,
-            dimension_averages={"clarity": 7.5, "value_prop": 7.0},
+            dimension_averages={"clarity": 7.5, "learner_benefit": 7.0},
             quality_per_dollar=110.0,
             token_spend_usd=0.068,
         )
@@ -122,7 +123,7 @@ class TestWithData:
         fig = dimension_breakdown(seeded_db)
         assert fig.layout.title.text == "Dimension Breakdown"
         assert len(fig.data) == 1  # One bar trace
-        assert len(fig.data[0].x) == 5  # 5 dimensions
+        assert len(fig.data[0].x) == 6  # 6 dimensions
 
     def test_before_after_with_data(self, seeded_db) -> None:
         # Get an ad_id from the DB

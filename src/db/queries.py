@@ -460,20 +460,21 @@ def insert_calibration_run(
     conn.execute(
         """INSERT INTO calibration_runs
            (id, model_version, alpha_overall, spearman_rho,
-            mae_clarity, mae_value_prop, mae_cta_effectiveness,
-            mae_brand_voice, mae_emotional_resonance,
+            mae_clarity, mae_learner_benefit, mae_cta_effectiveness,
+            mae_brand_voice, mae_student_empathy, mae_pedagogical_integrity,
             ad_count, passed, details_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             run_id,
             model_version,
             alpha_overall,
             spearman_rho,
             mae_per_dimension.get("clarity"),
-            mae_per_dimension.get("value_prop"),
+            mae_per_dimension.get("learner_benefit"),
             mae_per_dimension.get("cta_effectiveness"),
             mae_per_dimension.get("brand_voice"),
-            mae_per_dimension.get("emotional_resonance"),
+            mae_per_dimension.get("student_empathy"),
+            mae_per_dimension.get("pedagogical_integrity"),
             ad_count,
             int(passed),
             details_json,

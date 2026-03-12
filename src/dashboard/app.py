@@ -247,9 +247,7 @@ with tab_library:
                 img_path = ad_data.get("image_path", "")
                 has_image = img_path and Path(img_path).exists()
                 img_icon = "\U0001f5bc\ufe0f " if has_image else ""
-                with st.expander(
-                    f"{img_icon}{row['headline']} — {row['status']} ({row['score']})"
-                ):
+                with st.expander(f"{img_icon}{row['headline']} — {row['status']} ({row['score']})"):
                     if has_image:
                         img_col, dcol1, dcol2 = st.columns([1, 1, 1])
                         with img_col:

@@ -120,7 +120,6 @@ class TestDynamicThreshold:
         assert get_image_gen_threshold(db_conn) == 7.0
 
 
-
 # ---------------------------------------------------------------------------
 # generate_image (escalation)
 # ---------------------------------------------------------------------------
