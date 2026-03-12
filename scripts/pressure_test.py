@@ -61,10 +61,12 @@ def stage_calibrate() -> CalibrationResult | None:
     print_header("STAGE 1: CALIBRATION")
     try:
         result = run_calibration()
-        if result.passed:
-            print("\n  Calibration: ALL PASSED")
-        else:
-            print("\n  Calibration: FAILED")
+        print(f"\n  Alpha: {result.alpha_overall:.3f}")
+        print(f"  Spearman rho: {result.spearman_rho:.3f}")
+        for dim, mae in result.per_dimension_mae.items():
+            print(f"  MAE {dim}: {mae:.2f}")
+        print(f"  Status: {'PASSED' if result.passed else 'FAILED'}")
+        if not result.passed:
             print("  Suggested fixes:")
             print("    - Review data/reference_ads/calibration_gold_set.json for label accuracy")
             print("    - Adjust dimension weights in src/evaluate/rubrics.py")
