@@ -1,6 +1,6 @@
 """Tests for the evaluation engine.
 
-All Gemini API calls are mocked — no API keys required.
+All Gemini and Claude API calls are mocked — no API keys required.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from google.genai.errors import ClientError, ServerError
 
-from src.evaluate.engine import EvaluationEngine
+from src.evaluate.engine import CLAUDE_MODEL, EvaluationEngine
 from src.evaluate.rubrics import (
     DIMENSION_WEIGHTS,
     DIMENSIONS,
@@ -470,3 +470,164 @@ def test_evaluator_model_set(mock_log):
     result = engine.evaluate_iteration(_make_ad())
 
     assert result.evaluator_model == "gemini-2.5-pro"
+
+
+# ---------------------------------------------------------------------------
+# Claude helpers
+# ---------------------------------------------------------------------------
+
+
+def _mock_litellm_response(data: dict, total_tokens: int = 150) -> MagicMock:
+    """Create a mock litellm completion response."""
+    resp = MagicMock()
+    resp.choices = [MagicMock()]
+    resp.choices[0].message.content = json.dumps(data)
+    resp.usage = MagicMock()
+    resp.usage.total_tokens = total_tokens
+    return resp
+
+
+def _make_claude_engine() -> EvaluationEngine:
+    """Create engine configured for Claude evaluation."""
+    return EvaluationEngine(model_id=CLAUDE_MODEL)
+
+
+# ---------------------------------------------------------------------------
+# Tests: Claude — iteration mode
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+@patch("src.evaluate.engine.litellm")
+def test_claude_evaluation_iteration_flow(mock_litellm, mock_log):
+    """Claude iteration mode returns 6 DimensionScore objects via litellm."""
+    response_data = _make_all_dimensions_response()
+    mock_litellm.completion.return_value = _mock_litellm_response(response_data)
+
+    engine = _make_claude_engine()
+    result = engine.evaluate_iteration(_make_ad())
+
+    assert len(result.scores) == 6
+    dims_returned = {s.dimension for s in result.scores}
+    assert dims_returned == set(DIMENSIONS)
+    assert result.evaluator_model == CLAUDE_MODEL
+    mock_litellm.completion.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests: Claude — final mode
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+@patch("src.evaluate.engine.litellm")
+def test_claude_evaluation_final_flow(mock_litellm, mock_log):
+    """Claude final mode makes 6 separate litellm calls."""
+    responses = []
+    for dim in DIMENSIONS:
+        responses.append(_mock_litellm_response(_make_single_dimension_response(dim, 7.5)))
+    mock_litellm.completion.side_effect = responses
+
+    engine = _make_claude_engine()
+    result = engine.evaluate_final(_make_ad())
+
+    assert len(result.scores) == 6
+    assert mock_litellm.completion.call_count == 6
+
+
+# ---------------------------------------------------------------------------
+# Tests: Claude — evaluator model
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+@patch("src.evaluate.engine.litellm")
+def test_claude_evaluator_model_set(mock_litellm, mock_log):
+    """EvaluationResult.evaluator_model is claude-sonnet-4-6 for Claude engine."""
+    response_data = _make_all_dimensions_response()
+    mock_litellm.completion.return_value = _mock_litellm_response(response_data)
+
+    engine = _make_claude_engine()
+    result = engine.evaluate_iteration(_make_ad())
+
+    assert result.evaluator_model == CLAUDE_MODEL
+
+
+# ---------------------------------------------------------------------------
+# Tests: Claude — hard gate
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+@patch("src.evaluate.engine.litellm")
+def test_claude_hard_gate_works(mock_litellm, mock_log):
+    """Claude evaluation enforces brand_voice hard gate."""
+    scores = {
+        "clarity": 9.0,
+        "learner_benefit": 9.0,
+        "cta_effectiveness": 9.0,
+        "brand_voice": 4.0,
+        "student_empathy": 9.0,
+        "pedagogical_integrity": 9.0,
+    }
+    response_data = _make_all_dimensions_response(scores)
+    mock_litellm.completion.return_value = _mock_litellm_response(response_data)
+
+    engine = _make_claude_engine()
+    result = engine.evaluate_iteration(_make_ad())
+
+    assert result.passed_threshold is False
+    assert "brand_voice" in result.hard_gate_failures
+
+
+# ---------------------------------------------------------------------------
+# Tests: Claude — weighted average
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+@patch("src.evaluate.engine.litellm")
+def test_claude_weighted_average(mock_litellm, mock_log):
+    """Claude evaluation computes correct weighted average."""
+    scores = {
+        "clarity": 8.0,
+        "learner_benefit": 6.0,
+        "cta_effectiveness": 7.0,
+        "brand_voice": 9.0,
+        "student_empathy": 5.0,
+        "pedagogical_integrity": 7.0,
+    }
+    expected = round(sum(scores[d] * DIMENSION_WEIGHTS[d] for d in DIMENSIONS), 4)
+
+    response_data = _make_all_dimensions_response(scores)
+    mock_litellm.completion.return_value = _mock_litellm_response(response_data)
+
+    engine = _make_claude_engine()
+    result = engine.evaluate_iteration(_make_ad())
+
+    assert abs(result.weighted_average - expected) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# Tests: Claude — default model
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+def test_default_model_is_gemini(mock_log):
+    """No model_id defaults to gemini-2.5-pro."""
+    engine = EvaluationEngine(client=MagicMock())
+    assert engine._model == "gemini-2.5-pro"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Claude — visual eval guard
+# ---------------------------------------------------------------------------
+
+
+@patch("src.evaluate.engine.log_decision")
+def test_claude_visual_eval_raises(mock_log):
+    """Claude engine raises ValueError on visual eval."""
+    engine = _make_claude_engine()
+    with pytest.raises(ValueError, match="Visual evaluation requires Gemini multimodal"):
+        engine.evaluate_visual(None, _make_ad())

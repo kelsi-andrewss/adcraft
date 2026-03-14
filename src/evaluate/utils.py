@@ -1,4 +1,4 @@
-"""Shared Gemini retry utilities for AdCraft.
+"""Shared retry utilities for AdCraft evaluation engine.
 
 Centralizes retry logic, retriable error detection, and safety settings
 used by both evaluation and generation modules. Single source of truth
@@ -12,6 +12,7 @@ from google.genai.errors import APIError
 from tenacity import (
     retry,
     retry_if_exception,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
@@ -34,6 +35,24 @@ SAFETY_SETTINGS = [
 
 gemini_retry = retry(
     retry=retry_if_exception(is_retriable),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=60),
+    reraise=True,
+)
+
+try:
+    from litellm.exceptions import (
+        RateLimitError,
+        ServiceUnavailableError,
+    )
+
+    _LITELLM_RETRYABLE = (RateLimitError, ServiceUnavailableError)
+except ImportError:
+    _LITELLM_RETRYABLE = (Exception,)
+
+
+claude_retry = retry(
+    retry=retry_if_exception_type(_LITELLM_RETRYABLE),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=2, min=2, max=60),
     reraise=True,
