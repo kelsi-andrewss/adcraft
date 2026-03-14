@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 # ---------------------------------------------------------------------------
 # ads
@@ -577,3 +577,53 @@ def get_image_gen_threshold(conn: sqlite3.Connection) -> float:
     if row is None or row["avg_weighted_score"] is None:
         return 7.0
     return max(7.0, row["avg_weighted_score"] - 0.5)
+
+
+# ---------------------------------------------------------------------------
+# performance_feedback
+# ---------------------------------------------------------------------------
+
+
+def insert_performance_feedback(
+    conn: sqlite3.Connection,
+    *,
+    ad_id: str,
+    platform: str,
+    impressions: int = 0,
+    clicks: int = 0,
+    conversions: int = 0,
+    spend_usd: float = 0.0,
+    date_start: date,
+    date_end: date,
+) -> str:
+    """Insert a performance feedback row and return its generated ID."""
+    fb_id = str(uuid.uuid4())
+    conn.execute(
+        """INSERT INTO performance_feedback
+           (id, ad_id, platform, impressions, clicks, conversions,
+            spend_usd, date_start, date_end)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            fb_id,
+            ad_id,
+            platform,
+            impressions,
+            clicks,
+            conversions,
+            spend_usd,
+            date_start.isoformat(),
+            date_end.isoformat(),
+        ),
+    )
+    conn.commit()
+    return fb_id
+
+
+def get_performance_feedback_for_ad(conn: sqlite3.Connection, ad_id: str) -> list[dict]:
+    """Fetch all performance feedback rows for an ad, ordered by date_start ASC."""
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM performance_feedback WHERE ad_id = ? ORDER BY date_start ASC",
+        (ad_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]

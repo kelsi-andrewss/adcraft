@@ -92,3 +92,16 @@ CREATE TABLE IF NOT EXISTS calibration_runs (
     passed INTEGER NOT NULL DEFAULT 0,
     details_json TEXT
 );
+
+CREATE TABLE IF NOT EXISTS performance_feedback (
+    id TEXT PRIMARY KEY,
+    ad_id TEXT NOT NULL REFERENCES ads(id),
+    platform TEXT NOT NULL,
+    impressions INTEGER NOT NULL DEFAULT 0,
+    clicks INTEGER NOT NULL DEFAULT 0,
+    conversions INTEGER NOT NULL DEFAULT 0,
+    spend_usd REAL NOT NULL DEFAULT 0.0,
+    date_start TEXT NOT NULL,
+    date_end TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

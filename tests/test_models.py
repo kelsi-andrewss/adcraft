@@ -229,6 +229,7 @@ class TestSchema:
             "competitor_ads",
             "quality_snapshots",
             "calibration_runs",
+            "performance_feedback",
         }
         assert tables == expected
 
@@ -248,6 +249,7 @@ class TestSchema:
             "competitor_ads",
             "quality_snapshots",
             "calibration_runs",
+            "performance_feedback",
         }
         assert tables == expected
 
@@ -264,7 +266,7 @@ class TestSchema:
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         conn.close()
-        assert len(tables) == 7
+        assert len(tables) == 8
 
     def test_insert_and_query_ad(self):
         """Verify we can insert and retrieve an ad row."""
