@@ -38,28 +38,16 @@ class WeightEvolver:
             },
         )
 
-    def calculate_correlations(self) -> dict[str, float]:
-        """Compute Pearson correlation between each dimension and weighted average.
-
-        Queries all evaluation scores from DB, groups by ad_id, computes
-        weighted averages, then correlates each dimension against that average.
-        """
-        # Fetch all evaluation rows
+    def _fetch_complete_ads(self) -> dict[str, dict[str, float]]:
+        """Query evaluation rows, build complete_ads dict (ads with all DIMENSIONS)."""
         self._conn.row_factory = sqlite3.Row
         rows = self._conn.execute(
             "SELECT ad_id, dimension, score FROM evaluations ORDER BY ad_id"
         ).fetchall()
 
         if not rows:
-            log_decision(
-                "analytics",
-                "no_evaluation_data",
-                "No evaluation data found in database",
-                {},
-            )
             return {}
 
-        # Group scores by ad_id
         ad_scores: dict[str, dict[str, float]] = {}
         for row in rows:
             ad_id = row["ad_id"]
@@ -67,33 +55,48 @@ class WeightEvolver:
                 ad_scores[ad_id] = {}
             ad_scores[ad_id][row["dimension"]] = float(row["score"])
 
-        # Filter to ads with all dimensions scored
-        complete_ads: dict[str, dict[str, float]] = {
+        return {
             ad_id: scores
             for ad_id, scores in ad_scores.items()
             if all(d in scores for d in DIMENSIONS)
         }
+
+    def _compute_weighted_scores(
+        self,
+        complete_ads: dict[str, dict[str, float]],
+        weights: dict[str, float],
+    ) -> dict[str, float]:
+        """Compute weighted average score per ad."""
+        return {
+            ad_id: sum(scores[d] * weights[d] for d in DIMENSIONS)
+            for ad_id, scores in complete_ads.items()
+        }
+
+    def calculate_correlations(self) -> dict[str, float]:
+        """Compute Pearson correlation between each dimension and weighted average.
+
+        Queries all evaluation scores from DB, groups by ad_id, computes
+        weighted averages, then correlates each dimension against that average.
+        """
+        complete_ads = self._fetch_complete_ads()
 
         if not complete_ads:
             log_decision(
                 "analytics",
                 "no_complete_evaluations",
                 "No ads with complete dimension scores found",
-                {"total_ads": len(ad_scores), "required_dimensions": DIMENSIONS},
+                {},
             )
             return {}
 
-        # Compute weighted averages per ad
-        weighted_avgs: list[float] = []
+        weighted_scores = self._compute_weighted_scores(complete_ads, self._initial_weights)
+        weighted_avgs = list(weighted_scores.values())
+
         dim_score_lists: dict[str, list[float]] = {d: [] for d in DIMENSIONS}
-
-        for scores in complete_ads.values():
-            w_avg = sum(scores[d] * self._initial_weights[d] for d in DIMENSIONS)
-            weighted_avgs.append(w_avg)
+        for ad_id in weighted_scores:
             for d in DIMENSIONS:
-                dim_score_lists[d].append(scores[d])
+                dim_score_lists[d].append(complete_ads[ad_id][d])
 
-        # Calculate Pearson correlation for each dimension vs weighted average
         correlations: dict[str, float] = {}
         for dim in DIMENSIONS:
             r = _pearson(dim_score_lists[dim], weighted_avgs)
@@ -184,6 +187,83 @@ class WeightEvolver:
 
         return recommended
 
+    def run_shadow_analysis(self, recommended_weights: dict[str, float]) -> dict:
+        """Score all complete ads under current and recommended weights, compare.
+
+        Returns comparison metrics including MAD, Pearson correlation,
+        top-decile ranking shift, and score deltas summary.
+        """
+        complete_ads = self._fetch_complete_ads()
+        sample_count = len(complete_ads)
+
+        if sample_count < self._min_sample_size:
+            log_decision(
+                "analytics",
+                "shadow_insufficient_data",
+                f"Shadow analysis skipped: only {sample_count} complete ads "
+                f"(need {self._min_sample_size})",
+                {"sample_count": sample_count},
+            )
+            return {"status": "insufficient_data", "sample_count": sample_count}
+
+        current_scores = self._compute_weighted_scores(complete_ads, self._initial_weights)
+        recommended_scores = self._compute_weighted_scores(complete_ads, recommended_weights)
+
+        ad_ids = list(current_scores.keys())
+        current_vals = [current_scores[a] for a in ad_ids]
+        recommended_vals = [recommended_scores[a] for a in ad_ids]
+
+        # Mean absolute deviation
+        deltas = [recommended_vals[i] - current_vals[i] for i in range(sample_count)]
+        abs_deltas = [abs(d) for d in deltas]
+        mean_absolute_deviation = round(sum(abs_deltas) / sample_count, 6)
+
+        # Pearson correlation between the two score sets
+        pearson_correlation = _pearson(current_vals, recommended_vals)
+
+        # Score deltas summary
+        mean_delta = round(sum(deltas) / sample_count, 6)
+        max_positive_delta = round(max(deltas), 6)
+        max_negative_delta = round(min(deltas), 6)
+
+        # Top-decile ranking shift
+        top_k = math.ceil(sample_count * 0.10)
+        current_ranked = sorted(ad_ids, key=lambda a: current_scores[a], reverse=True)
+        recommended_ranked = sorted(ad_ids, key=lambda a: recommended_scores[a], reverse=True)
+        current_top = set(current_ranked[:top_k])
+        recommended_top = set(recommended_ranked[:top_k])
+        top_decile_shift_count = len(current_top - recommended_top)
+        top_decile_shift_pct = round(top_decile_shift_count / top_k, 4) if top_k > 0 else 0.0
+
+        result = {
+            "status": "complete",
+            "sample_count": sample_count,
+            "mean_absolute_deviation": mean_absolute_deviation,
+            "pearson_correlation": pearson_correlation,
+            "top_decile_shift_count": top_decile_shift_count,
+            "top_decile_shift_pct": top_decile_shift_pct,
+            "current_weights": dict(self._initial_weights),
+            "recommended_weights": dict(recommended_weights),
+            "score_deltas_summary": {
+                "mean_delta": mean_delta,
+                "max_positive_delta": max_positive_delta,
+                "max_negative_delta": max_negative_delta,
+            },
+        }
+
+        log_decision(
+            "analytics",
+            "shadow_analysis_complete",
+            f"Shadow analysis on {sample_count} ads: "
+            f"MAD={mean_absolute_deviation:.4f}, "
+            f"r={pearson_correlation:.4f}, "
+            f"top-decile shift={top_decile_shift_count}/{top_k} "
+            f"({top_decile_shift_pct:.1%})",
+            result,
+        )
+
+        return result
+
     def evolve(self) -> dict:
         """Run the full weight evolution analysis if sample size is met.
 
@@ -231,6 +311,9 @@ class WeightEvolver:
             "recommended_weights": recommended,
             "current_weights": dict(self._initial_weights),
         }
+
+        if recommended != self._initial_weights:
+            result["shadow_analysis"] = self.run_shadow_analysis(recommended)
 
         log_decision(
             "analytics",
