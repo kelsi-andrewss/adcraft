@@ -10,8 +10,11 @@ import json
 import sqlite3
 
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-from src.evaluate.rubrics import DIMENSION_WEIGHTS, PASSING_THRESHOLD
+from src.db.queries import get_recent_calibration_runs
+from src.evaluate.calibrate import ALPHA_THRESHOLD
+from src.evaluate.rubrics import DIMENSION_WEIGHTS, DIMENSIONS, PASSING_THRESHOLD
 
 # Nerdy brand cyan as primary, with complementary palette
 PRIMARY_COLOR = "#17E2EA"
@@ -301,4 +304,72 @@ def cost_efficiency_trend(db_conn: sqlite3.Connection) -> go.Figure:
         yaxis={"title": "Quality per Dollar", "side": "left"},
         yaxis2={"title": "Token Spend (USD)", "side": "right", "overlaying": "y"},
     )
+    return fig
+
+
+def calibration_trend_chart(db_conn: sqlite3.Connection) -> go.Figure:
+    """Dual-panel: Alpha over time (top), per-dimension MAE (bottom)."""
+    runs = get_recent_calibration_runs(db_conn, limit=50)
+
+    if not runs:
+        return _empty_figure("Calibration Trends")
+
+    # Reverse to chronological order (query returns DESC)
+    runs = list(reversed(runs))
+    timestamps = [r["timestamp"] for r in runs]
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        subplot_titles=("Alpha Stability", "Per-Dimension MAE"),
+        vertical_spacing=0.15,
+    )
+
+    # Top panel: Alpha over time
+    alphas = [r["alpha_overall"] for r in runs]
+    fig.add_trace(
+        go.Scatter(
+            x=timestamps,
+            y=alphas,
+            mode="lines+markers",
+            name="Alpha",
+            line={"color": PRIMARY_COLOR, "width": 2},
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_hline(
+        y=ALPHA_THRESHOLD,
+        line_dash="dash",
+        line_color=FAIL_COLOR,
+        line_width=1,
+        row=1,
+        col=1,
+    )
+
+    # Bottom panel: per-dimension MAE
+    for dim in DIMENSIONS:
+        mae_col = f"mae_{dim}"
+        values = [r[mae_col] for r in runs]
+        color = DIMENSION_COLORS.get(dim, "gray")
+        fig.add_trace(
+            go.Scatter(
+                x=timestamps,
+                y=values,
+                mode="lines+markers",
+                name=dim.replace("_", " ").title(),
+                line={"color": color, "width": 1.5},
+            ),
+            row=2,
+            col=1,
+        )
+
+    fig.update_layout(
+        template=TEMPLATE,
+        title="Calibration Trends",
+        height=600,
+    )
+    fig.update_yaxes(title_text="Alpha", row=1, col=1)
+    fig.update_yaxes(title_text="MAE", row=2, col=1)
+
     return fig

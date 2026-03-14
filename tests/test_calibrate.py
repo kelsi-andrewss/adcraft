@@ -8,10 +8,21 @@ implemented in the calibrate.py rewrite story.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import pytest
 
-from src.evaluate.calibrate import calculate_metrics, check_gold_set_overlap
+from src.db.init_db import init_db
+from src.db.queries import insert_calibration_run
+from src.evaluate.calibrate import (
+    ALPHA_THRESHOLD,
+    CONSECUTIVE_FAILURES,
+    DRIFT_WINDOW,
+    MAE_INCREASE_RUNS,
+    calculate_metrics,
+    check_gold_set_overlap,
+    detect_drift,
+)
 
 # ---------------------------------------------------------------------------
 # Tests: Krippendorff's Alpha
@@ -92,3 +103,152 @@ def test_gold_set_overlap_guard(tmp_path):
     gold_set_clean = tmp_path / "gold_set_clean.json"
     gold_set_clean.write_text(json.dumps([{"id": "ad-003"}, {"id": "ad-004"}]))
     check_gold_set_overlap(few_shot_path, gold_set_clean)
+
+
+# ---------------------------------------------------------------------------
+# Tests: Calibration drift detection
+# ---------------------------------------------------------------------------
+
+def _make_conn():
+    """Create an in-memory database with the full schema."""
+    return init_db(":memory:")
+
+
+def _seed_calibration_runs(conn, runs: list[dict]) -> None:
+    """Insert calibration runs in order. Each dict can override defaults."""
+    defaults = {
+        "model_version": "gemini-2.5-pro",
+        "alpha_overall": 0.9,
+        "spearman_rho": 0.8,
+        "mae_per_dimension": {
+            "clarity": 0.5,
+            "learner_benefit": 0.5,
+            "cta_effectiveness": 0.5,
+            "brand_voice": 0.5,
+            "student_empathy": 0.5,
+            "pedagogical_integrity": 0.5,
+        },
+        "ad_count": 4,
+        "passed": True,
+    }
+    for run in runs:
+        kwargs = {**defaults}
+        # Handle alpha_overall override -> goes into kwargs directly
+        if "alpha_overall" in run:
+            kwargs["alpha_overall"] = run["alpha_overall"]
+        # Handle per-dimension MAE overrides
+        mae = dict(kwargs["mae_per_dimension"])
+        for key, val in run.items():
+            if key.startswith("mae_"):
+                dim = key.removeprefix("mae_")
+                mae[dim] = val
+        kwargs["mae_per_dimension"] = mae
+        insert_calibration_run(conn, **kwargs)
+
+
+def test_detect_drift_no_runs():
+    """No calibration runs produces no alerts."""
+    conn = _make_conn()
+    alerts = detect_drift(conn)
+    assert alerts == []
+    conn.close()
+
+
+def test_detect_drift_healthy():
+    """All runs above threshold produces no alerts."""
+    conn = _make_conn()
+    _seed_calibration_runs(conn, [{"alpha_overall": 0.95}] * DRIFT_WINDOW)
+    alerts = detect_drift(conn)
+    assert alerts == []
+    conn.close()
+
+
+@patch("src.evaluate.calibrate.log_decision")
+def test_detect_drift_alpha_consecutive_failures(mock_log):
+    """CONSECUTIVE_FAILURES runs below ALPHA_THRESHOLD triggers alpha_drift."""
+    conn = _make_conn()
+    healthy = [{"alpha_overall": 0.9}] * 2
+    failing = [{"alpha_overall": ALPHA_THRESHOLD - 0.1}] * CONSECUTIVE_FAILURES
+    _seed_calibration_runs(conn, healthy + failing)
+
+    alerts = detect_drift(conn)
+
+    alpha_alerts = [a for a in alerts if a.alert_type == "alpha_drift"]
+    assert len(alpha_alerts) == 1
+    assert alpha_alerts[0].detail["consecutive_failures"] == CONSECUTIVE_FAILURES
+    conn.close()
+
+
+@patch("src.evaluate.calibrate.log_decision")
+def test_detect_drift_alpha_broken_streak(mock_log):
+    """A passing run in the middle breaks the consecutive failure streak."""
+    conn = _make_conn()
+    runs = [
+        {"alpha_overall": ALPHA_THRESHOLD - 0.1},
+        {"alpha_overall": ALPHA_THRESHOLD - 0.1},
+        {"alpha_overall": 0.95},  # breaks the streak
+        {"alpha_overall": ALPHA_THRESHOLD - 0.1},
+        {"alpha_overall": ALPHA_THRESHOLD - 0.1},
+    ]
+    _seed_calibration_runs(conn, runs)
+
+    alerts = detect_drift(conn)
+
+    alpha_alerts = [a for a in alerts if a.alert_type == "alpha_drift"]
+    assert len(alpha_alerts) == 0
+    conn.close()
+
+
+@patch("src.evaluate.calibrate.log_decision")
+def test_detect_drift_mae_increasing(mock_log):
+    """Monotonically increasing MAE over MAE_INCREASE_RUNS triggers mae_drift."""
+    conn = _make_conn()
+    runs = []
+    for i in range(MAE_INCREASE_RUNS):
+        runs.append({"mae_clarity": 0.5 + i * 0.1})
+    _seed_calibration_runs(conn, runs)
+
+    alerts = detect_drift(conn)
+
+    mae_alerts = [a for a in alerts if a.alert_type == "mae_drift"]
+    assert len(mae_alerts) == 1
+    assert mae_alerts[0].detail["dimension"] == "clarity"
+    conn.close()
+
+
+@patch("src.evaluate.calibrate.log_decision")
+def test_detect_drift_mae_stable(mock_log):
+    """Stable MAE values produce no mae_drift alerts."""
+    conn = _make_conn()
+    runs = [{"mae_clarity": 0.5}] * DRIFT_WINDOW
+    _seed_calibration_runs(conn, runs)
+
+    alerts = detect_drift(conn)
+
+    mae_alerts = [a for a in alerts if a.alert_type == "mae_drift"]
+    assert len(mae_alerts) == 0
+    conn.close()
+
+
+@patch("src.evaluate.calibrate.log_decision")
+def test_detect_drift_logs_decisions(mock_log):
+    """Each drift alert triggers a log_decision call."""
+    conn = _make_conn()
+    runs = []
+    for i in range(max(CONSECUTIVE_FAILURES, MAE_INCREASE_RUNS)):
+        runs.append(
+            {
+                "alpha_overall": ALPHA_THRESHOLD - 0.1,
+                "mae_clarity": 0.5 + i * 0.1,
+            }
+        )
+    _seed_calibration_runs(conn, runs)
+
+    alerts = detect_drift(conn)
+
+    assert len(alerts) >= 2
+    assert mock_log.call_count == len(alerts)
+    for call in mock_log.call_args_list:
+        assert call.args[0] == "calibration"
+        assert call.args[1] in ("alpha_drift", "mae_drift")
+    conn.close()

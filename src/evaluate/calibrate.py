@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,14 +29,19 @@ from scipy.stats import spearmanr
 load_dotenv()
 
 from src.db.init_db import init_db  # noqa: E402
-from src.db.queries import insert_calibration_run  # noqa: E402
+from src.db.queries import get_recent_calibration_runs, insert_calibration_run  # noqa: E402
 from src.decisions.logger import log_decision  # noqa: E402
 from src.evaluate.engine import EvaluationEngine  # noqa: E402
 from src.evaluate.rubrics import DIMENSIONS, FEW_SHOT_EXAMPLES  # noqa: E402
 from src.models.ad import AdCopy  # noqa: E402
-from src.models.calibration import CalibrationResult  # noqa: E402
+from src.models.calibration import CalibrationResult, DriftAlert  # noqa: E402
 
 ALPHA_THRESHOLD = 0.67
+DRIFT_WINDOW: int = 5
+CONSECUTIVE_FAILURES: int = 3
+MAE_INCREASE_RUNS: int = 3
+
+MAE_DIMENSIONS = [f"mae_{d}" for d in DIMENSIONS]
 
 
 def check_gold_set_overlap(few_shot_path: Path, gold_set_path: Path) -> None:
@@ -183,6 +189,78 @@ def _calculate_metrics_structured(
     return float(alpha_overall), float(rho), per_dimension_mae
 
 
+def detect_drift(conn: sqlite3.Connection) -> list[DriftAlert]:
+    """Fetch the last DRIFT_WINDOW calibration_runs ordered by timestamp DESC.
+
+    Checks:
+    1. Alpha drift: CONSECUTIVE_FAILURES consecutive runs with alpha < ALPHA_THRESHOLD.
+    2. MAE drift: any dimension where MAE increases for MAE_INCREASE_RUNS consecutive runs.
+
+    Returns list of DriftAlert. Each alert logged via log_decision inside this function.
+    """
+    runs = get_recent_calibration_runs(conn, limit=DRIFT_WINDOW)
+    alerts: list[DriftAlert] = []
+
+    if not runs:
+        return alerts
+
+    # Alpha drift: check from newest to oldest for consecutive failures
+    consecutive_alpha_failures = 0
+    for run in runs:
+        if run["alpha_overall"] < ALPHA_THRESHOLD:
+            consecutive_alpha_failures += 1
+        else:
+            break
+
+    if consecutive_alpha_failures >= CONSECUTIVE_FAILURES:
+        alphas = [run["alpha_overall"] for run in runs[:consecutive_alpha_failures]]
+        alert = DriftAlert(
+            alert_type="alpha_drift",
+            message=(
+                f"Alpha below {ALPHA_THRESHOLD} for {consecutive_alpha_failures} consecutive runs"
+            ),
+            detail={"consecutive_failures": consecutive_alpha_failures, "alphas": alphas},
+        )
+        alerts.append(alert)
+        log_decision(
+            "calibration",
+            alert.alert_type,
+            alert.message,
+            alert.detail,
+            conn=conn,
+        )
+
+    # MAE drift: reverse to chronological order and check monotonic increase
+    if len(runs) >= MAE_INCREASE_RUNS:
+        chronological = list(reversed(runs))
+        for mae_col in MAE_DIMENSIONS:
+            values = [r[mae_col] for r in chronological if r[mae_col] is not None]
+            if len(values) < MAE_INCREASE_RUNS:
+                continue
+            # Check the last MAE_INCREASE_RUNS values for monotonic increase
+            tail = values[-MAE_INCREASE_RUNS:]
+            increasing = all(tail[i] < tail[i + 1] for i in range(len(tail) - 1))
+            if increasing:
+                dim_name = mae_col.removeprefix("mae_")
+                alert = DriftAlert(
+                    alert_type="mae_drift",
+                    message=(
+                        f"MAE for {dim_name} increased over {MAE_INCREASE_RUNS} consecutive runs"
+                    ),
+                    detail={"dimension": dim_name, "values": tail},
+                )
+                alerts.append(alert)
+                log_decision(
+                    "calibration",
+                    alert.alert_type,
+                    alert.message,
+                    alert.detail,
+                    conn=conn,
+                )
+
+    return alerts
+
+
 def run_calibration() -> CalibrationResult:
     """Run calibration against the gold set and return structured results."""
     engine = EvaluationEngine()
@@ -272,7 +350,7 @@ def run_calibration() -> CalibrationResult:
         details={"per_ad_results": eval_results},
     )
 
-    # Persist to DB
+    # Persist to DB and check for drift
     conn = init_db(os.environ.get("DATABASE_PATH", "data/ads.db"))
     try:
         insert_calibration_run(
@@ -285,6 +363,15 @@ def run_calibration() -> CalibrationResult:
             passed=passed,
             details={"per_ad_results": eval_results},
         )
+        alerts = detect_drift(conn)
+        for alert in alerts:
+            log_decision(
+                "calibration",
+                alert.alert_type,
+                alert.message,
+                alert.detail,
+                conn=conn,
+            )
     finally:
         conn.close()
 

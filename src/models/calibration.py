@@ -1,4 +1,16 @@
+from __future__ import annotations
+
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+class DriftAlert(BaseModel):
+    """A single drift detection alert."""
+
+    alert_type: Literal["alpha_drift", "mae_drift"]
+    message: str
+    detail: dict = Field(default_factory=dict)
 
 
 class CalibrationResult(BaseModel):

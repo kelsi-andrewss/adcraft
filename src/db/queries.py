@@ -500,6 +500,22 @@ def list_calibration_runs(conn: sqlite3.Connection, *, limit: int = 20) -> list[
     return results
 
 
+def get_recent_calibration_runs(conn: sqlite3.Connection, *, limit: int = 5) -> list[dict]:
+    """Fetch recent calibration runs ordered by timestamp DESC. Omits details_json."""
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """SELECT id, timestamp, alpha_overall, spearman_rho,
+                  mae_clarity, mae_learner_benefit, mae_cta_effectiveness,
+                  mae_brand_voice, mae_student_empathy, mae_pedagogical_integrity,
+                  passed
+           FROM calibration_runs
+           ORDER BY timestamp DESC, rowid DESC
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # images
 # ---------------------------------------------------------------------------
