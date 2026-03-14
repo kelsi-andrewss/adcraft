@@ -22,6 +22,7 @@ from src.models.iteration import IterationRecord
 
 MAX_CYCLES = 5
 COHERENCE_DROP_THRESHOLD = 0.5
+CONVERGENCE_THRESHOLD = 0.3
 
 
 class State(str, Enum):
@@ -59,6 +60,7 @@ class IterationController:
         ad: AdCopy | None = None
         evaluation: EvaluationResult | None = None
         pre_fix_score: float = 0.0
+        last_score: float = 0.0
         records: list[IterationRecord] = []
         feedback_context: list[str] = []
 
@@ -141,6 +143,26 @@ class IterationController:
                                 "hard_gate_failures": evaluation.hard_gate_failures,
                             },
                         )
+                        delta = evaluation.weighted_average - last_score
+                        if cycle > 1 and delta < CONVERGENCE_THRESHOLD:
+                            log_decision(
+                                "iterate",
+                                "diminishing_returns",
+                                f"Convergence stalled at cycle {cycle}: "
+                                f"delta={delta:+.2f} "
+                                f"(from {last_score:.2f} to {evaluation.weighted_average:.2f}), "
+                                f"below {CONVERGENCE_THRESHOLD} threshold",
+                                {
+                                    "cycle": cycle,
+                                    "last_score": last_score,
+                                    "current_score": evaluation.weighted_average,
+                                    "delta": delta,
+                                    "threshold": CONVERGENCE_THRESHOLD,
+                                },
+                            )
+                            state = State.FAIL
+                            continue
+                        last_score = evaluation.weighted_average
                         pre_fix_score = evaluation.weighted_average
                         state = State.FIX
 
@@ -252,6 +274,26 @@ class IterationController:
                             )
                             state = State.ACCEPT
                         else:
+                            if score_delta < CONVERGENCE_THRESHOLD:
+                                log_decision(
+                                    "iterate",
+                                    "diminishing_returns",
+                                    f"Convergence stalled after coherence check: "
+                                    f"delta={score_delta:+.2f} "
+                                    f"(from {pre_fix_score:.2f} to "
+                                    f"{coherence_eval.weighted_average:.2f}), "
+                                    f"below {CONVERGENCE_THRESHOLD} threshold",
+                                    {
+                                        "cycle": cycle,
+                                        "last_score": pre_fix_score,
+                                        "current_score": coherence_eval.weighted_average,
+                                        "delta": score_delta,
+                                        "threshold": CONVERGENCE_THRESHOLD,
+                                    },
+                                )
+                                state = State.FAIL
+                                continue
+                            last_score = coherence_eval.weighted_average
                             # Loop back to generate for next cycle
                             cycle += 1
                             if cycle > MAX_CYCLES:
