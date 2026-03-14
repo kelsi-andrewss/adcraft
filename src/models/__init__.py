@@ -3,6 +3,7 @@ from src.models.brief import AdBrief
 from src.models.decision import DecisionEntry
 from src.models.evaluation import DimensionScore, EvaluationResult
 from src.models.iteration import IterationRecord
+from src.models.performance import PerformanceFeedback
 
 __all__ = [
     "AdBrief",
@@ -11,4 +12,5 @@ __all__ = [
     "DimensionScore",
     "EvaluationResult",
     "IterationRecord",
+    "PerformanceFeedback",
 ]

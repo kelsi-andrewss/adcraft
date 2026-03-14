@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 # ---------------------------------------------------------------------------
 # ads
@@ -71,9 +71,7 @@ def get_ad(conn: sqlite3.Connection, ad_id: str) -> dict | None:
 def list_ads(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict]:
     """List ads ordered by creation time descending."""
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM ads ORDER BY created_at DESC LIMIT ?", (limit,)
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM ads ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -336,9 +334,7 @@ def list_quality_snapshots(conn: sqlite3.Connection, *, limit: int = 100) -> lis
 # ---------------------------------------------------------------------------
 
 
-def get_competitor_ads(
-    conn: sqlite3.Connection, brand: str | None = None
-) -> list[dict]:
+def get_competitor_ads(conn: sqlite3.Connection, brand: str | None = None) -> list[dict]:
     """Select competitor ads, optionally filtered by brand."""
     conn.row_factory = sqlite3.Row
     if brand is not None:
@@ -347,18 +343,14 @@ def get_competitor_ads(
             (brand,),
         ).fetchall()
     else:
-        rows = conn.execute(
-            "SELECT * FROM competitor_ads ORDER BY scraped_at DESC"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM competitor_ads ORDER BY scraped_at DESC").fetchall()
     return [dict(r) for r in rows]
 
 
 def get_quality_snapshots(conn: sqlite3.Connection) -> list[dict]:
     """Select all quality snapshots ordered by cycle_number ascending."""
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM quality_snapshots ORDER BY cycle_number ASC"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM quality_snapshots ORDER BY cycle_number ASC").fetchall()
     results = []
     for r in rows:
         d = dict(r)
@@ -408,9 +400,7 @@ def get_ads_with_scores(conn: sqlite3.Connection) -> list[dict]:
 def get_all_decisions(conn: sqlite3.Connection) -> list[dict]:
     """Select all decisions ordered by timestamp ascending."""
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT * FROM decisions ORDER BY timestamp ASC"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM decisions ORDER BY timestamp ASC").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -446,3 +436,53 @@ def get_dimension_averages(
         ).fetchall()
 
     return {r["dimension"]: r["avg_score"] for r in rows}
+
+
+# ---------------------------------------------------------------------------
+# performance_feedback
+# ---------------------------------------------------------------------------
+
+
+def insert_performance_feedback(
+    conn: sqlite3.Connection,
+    *,
+    ad_id: str,
+    platform: str,
+    impressions: int = 0,
+    clicks: int = 0,
+    conversions: int = 0,
+    spend_usd: float = 0.0,
+    date_start: date,
+    date_end: date,
+) -> str:
+    """Insert a performance feedback row and return its generated ID."""
+    fb_id = str(uuid.uuid4())
+    conn.execute(
+        """INSERT INTO performance_feedback
+           (id, ad_id, platform, impressions, clicks, conversions,
+            spend_usd, date_start, date_end)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            fb_id,
+            ad_id,
+            platform,
+            impressions,
+            clicks,
+            conversions,
+            spend_usd,
+            date_start.isoformat(),
+            date_end.isoformat(),
+        ),
+    )
+    conn.commit()
+    return fb_id
+
+
+def get_performance_feedback_for_ad(conn: sqlite3.Connection, ad_id: str) -> list[dict]:
+    """Fetch all performance feedback rows for an ad, ordered by date_start ASC."""
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM performance_feedback WHERE ad_id = ? ORDER BY date_start ASC",
+        (ad_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
