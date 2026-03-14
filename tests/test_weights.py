@@ -143,8 +143,7 @@ class TestShadowAnalysis:
         evolver = WeightEvolver(seeded_db, min_sample_size=1)
         shifted_weights = {d: 0.2 for d in DIMENSIONS}
         shifted_weights["clarity"] = 0.6
-        shifted_weights["emotional_resonance"] = 0.05
-        # Re-normalize to sum to ~1
+        # Re-normalize to sum to 1.0
         total = sum(shifted_weights.values())
         shifted_weights = {d: w / total for d, w in shifted_weights.items()}
 
