@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from src.db.queries import get_recent_calibration_runs
-from src.evaluate.calibrate import ALPHA_THRESHOLD
+from src.evaluate.calibrate import ALPHA_THRESHOLD, MID_RANGE_BOUNDS
 from src.evaluate.rubrics import DIMENSION_WEIGHTS, DIMENSIONS, PASSING_THRESHOLD
 
 # Nerdy brand cyan as primary, with complementary palette
@@ -372,4 +372,66 @@ def calibration_trend_chart(db_conn: sqlite3.Connection) -> go.Figure:
     fig.update_yaxes(title_text="Alpha", row=1, col=1)
     fig.update_yaxes(title_text="MAE", row=2, col=1)
 
+    return fig
+
+
+def mid_range_performance(db_conn: sqlite3.Connection) -> go.Figure:
+    """Grouped bar chart comparing MAE across low/mid/high score bands."""
+    db_conn.row_factory = sqlite3.Row
+    rows = db_conn.execute(
+        """
+        SELECT e.dimension, e.score, e.ad_id
+        FROM evaluations e
+        WHERE e.eval_mode = 'final' OR e.eval_mode IS NULL
+        """
+    ).fetchall()
+
+    if not rows:
+        return _empty_figure("Mid-Range Performance")
+
+    lo, hi = MID_RANGE_BOUNDS
+    bands: dict[str, list[float]] = {"low": [], "mid": [], "high": []}
+
+    for r in rows:
+        score = r["score"]
+        if score < lo:
+            bands["low"].append(score)
+        elif score <= hi:
+            bands["mid"].append(score)
+        else:
+            bands["high"].append(score)
+
+    band_labels = [
+        f"Low (<{lo:.0f})",
+        f"Mid ({lo:.0f}-{hi:.0f})",
+        f"High (>{hi:.0f})",
+    ]
+    band_keys = ["low", "mid", "high"]
+    band_colors = [FAIL_COLOR, "#FFA500", PASS_COLOR]
+
+    fig = go.Figure()
+    for label, key, color in zip(band_labels, band_keys, band_colors):
+        scores = bands[key]
+        if scores:
+            mean_score = sum(scores) / len(scores)
+        else:
+            mean_score = 0
+        fig.add_trace(
+            go.Bar(
+                x=[label],
+                y=[mean_score],
+                name=label,
+                marker_color=color,
+                text=[f"n={len(scores)}"],
+                textposition="outside",
+            )
+        )
+
+    fig.update_layout(
+        template=TEMPLATE,
+        title="Score Band Performance",
+        xaxis_title="Score Band",
+        yaxis_title="Mean Score",
+        showlegend=False,
+    )
     return fig

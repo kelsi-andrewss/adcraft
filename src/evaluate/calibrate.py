@@ -37,6 +37,7 @@ from src.models.ad import AdCopy  # noqa: E402
 from src.models.calibration import CalibrationResult, DriftAlert  # noqa: E402
 
 ALPHA_THRESHOLD = 0.67
+MID_RANGE_BOUNDS: tuple[float, float] = (4.0, 6.0)
 DRIFT_WINDOW: int = 5
 CONSECUTIVE_FAILURES: int = 3
 MAE_INCREASE_RUNS: int = 3
@@ -147,6 +148,59 @@ def calculate_metrics(
         "alpha": float(alpha_overall),
         "spearman_rho": float(rho),
         "mae": mae,
+    }
+
+
+def filter_mid_range_scores(
+    human_scores: list[float],
+    llm_scores: list[float],
+    bounds: tuple[float, float] = MID_RANGE_BOUNDS,
+) -> tuple[list[float], list[float]]:
+    """Extract pairs where EITHER human or LLM score falls within bounds (inclusive).
+
+    Raises ValueError if lists have different lengths.
+    """
+    if len(human_scores) != len(llm_scores):
+        raise ValueError(
+            f"human_scores length ({len(human_scores)}) != llm_scores length ({len(llm_scores)})"
+        )
+    lo, hi = bounds
+    human_out: list[float] = []
+    llm_out: list[float] = []
+    for h, m in zip(human_scores, llm_scores):
+        if (lo <= h <= hi) or (lo <= m <= hi):
+            human_out.append(h)
+            llm_out.append(m)
+    return human_out, llm_out
+
+
+def calculate_mid_range_metrics(
+    human_scores: list[float],
+    llm_scores: list[float],
+    bounds: tuple[float, float] = MID_RANGE_BOUNDS,
+) -> dict[str, float | int]:
+    """Compute Alpha and MAE for mid-range subset.
+
+    Returns dict with keys: alpha, mae, count, pct_of_total.
+    Returns insufficient_data=True when fewer than 3 pairs qualify.
+    """
+    total = len(human_scores)
+    h_mid, l_mid = filter_mid_range_scores(human_scores, llm_scores, bounds)
+    count = len(h_mid)
+
+    if count < 3:
+        return {
+            "insufficient_data": True,
+            "count": count,
+            "pct_of_total": round(count / total * 100, 1) if total else 0.0,
+        }
+
+    metrics = calculate_metrics(h_mid, l_mid)
+    return {
+        "alpha": metrics["alpha"],
+        "mae": metrics["mae"],
+        "count": count,
+        "pct_of_total": round(count / total * 100, 1) if total else 0.0,
     }
 
 
@@ -328,6 +382,41 @@ def run_calibration() -> CalibrationResult:
     for dim in DIMENSIONS:
         print(f"{dim:<25} {per_dim_mae[dim]:>10.3f}", flush=True)
 
+    # Mid-range audit
+    human_flat: list[float] = []
+    llm_flat: list[float] = []
+    for ad, er in zip(gold_ads, eval_results):
+        for dim in DIMENSIONS:
+            human_flat.append(float(ad["human_scores"][dim]))
+            llm_flat.append(float(er["llm_scores"][dim]))
+
+    mid_range = calculate_mid_range_metrics(human_flat, llm_flat)
+
+    print("\n" + "-" * 40, flush=True)
+    print("MID-RANGE AUDIT", flush=True)
+    print("-" * 40, flush=True)
+    if mid_range.get("insufficient_data"):
+        print(
+            f"  Insufficient data ({mid_range['count']} pairs, "
+            f"{mid_range['pct_of_total']:.1f}% of total)",
+            flush=True,
+        )
+    else:
+        print(f"  Alpha: {mid_range['alpha']:.3f}", flush=True)
+        print(f"  MAE:   {mid_range['mae']:.3f}", flush=True)
+        print(
+            f"  Pairs: {mid_range['count']} ({mid_range['pct_of_total']:.1f}% of total)",
+            flush=True,
+        )
+
+    log_decision(
+        "calibration",
+        "mid_range_audit",
+        f"Mid-range audit: {mid_range['count']} pairs "
+        f"in [{MID_RANGE_BOUNDS[0]}, {MID_RANGE_BOUNDS[1]}]",
+        mid_range,
+    )
+
     # Determine pass/fail
     passed = alpha >= ALPHA_THRESHOLD
 
@@ -347,7 +436,7 @@ def run_calibration() -> CalibrationResult:
         ad_count=n,
         model_version=engine._model,
         timestamp=datetime.now(timezone.utc).isoformat(),
-        details={"per_ad_results": eval_results},
+        details={"per_ad_results": eval_results, "mid_range_audit": mid_range},
     )
 
     # Persist to DB and check for drift

@@ -20,8 +20,10 @@ from src.evaluate.calibrate import (
     DRIFT_WINDOW,
     MAE_INCREASE_RUNS,
     calculate_metrics,
+    calculate_mid_range_metrics,
     check_gold_set_overlap,
     detect_drift,
+    filter_mid_range_scores,
 )
 
 # ---------------------------------------------------------------------------
@@ -108,6 +110,7 @@ def test_gold_set_overlap_guard(tmp_path):
 # ---------------------------------------------------------------------------
 # Tests: Calibration drift detection
 # ---------------------------------------------------------------------------
+
 
 def _make_conn():
     """Create an in-memory database with the full schema."""
@@ -252,3 +255,101 @@ def test_detect_drift_logs_decisions(mock_log):
         assert call.args[0] == "calibration"
         assert call.args[1] in ("alpha_drift", "mae_drift")
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Tests: filter_mid_range_scores
+# ---------------------------------------------------------------------------
+
+
+def test_filter_mid_range_inclusive_bounds():
+    """Scores exactly at bounds are included."""
+    human = [4.0, 6.0, 3.0, 7.0]
+    llm = [8.0, 2.0, 5.0, 9.0]
+
+    h_out, l_out = filter_mid_range_scores(human, llm)
+
+    # pair 0: human=4.0 in [4,6] -> yes
+    # pair 1: human=6.0 in [4,6] -> yes
+    # pair 2: llm=5.0 in [4,6] -> yes
+    # pair 3: neither in [4,6] -> no
+    assert h_out == [4.0, 6.0, 3.0]
+    assert l_out == [8.0, 2.0, 5.0]
+
+
+def test_filter_mid_range_exclusive_outside():
+    """Scores strictly outside bounds on both sides are excluded."""
+    human = [3.9, 6.1]
+    llm = [3.0, 7.0]
+
+    h_out, l_out = filter_mid_range_scores(human, llm)
+
+    assert h_out == []
+    assert l_out == []
+
+
+def test_filter_mid_range_either_side():
+    """Pair qualifies when only the LLM score falls in bounds."""
+    human = [8.0]
+    llm = [5.0]
+
+    h_out, l_out = filter_mid_range_scores(human, llm)
+
+    assert h_out == [8.0]
+    assert l_out == [5.0]
+
+
+def test_filter_mid_range_empty_inputs():
+    """Empty input lists return empty output lists."""
+    h_out, l_out = filter_mid_range_scores([], [])
+
+    assert h_out == []
+    assert l_out == []
+
+
+def test_filter_mid_range_mismatched_lengths():
+    """Mismatched list lengths raise ValueError."""
+    with pytest.raises(ValueError, match="length"):
+        filter_mid_range_scores([1.0, 2.0], [3.0])
+
+
+# ---------------------------------------------------------------------------
+# Tests: calculate_mid_range_metrics
+# ---------------------------------------------------------------------------
+
+
+def test_mid_range_metrics_known_values():
+    """Known mid-range subset produces correct alpha, mae, count, pct_of_total."""
+    human = [4.0, 5.0, 6.0, 4.5, 1.0, 9.0]
+    llm = [4.0, 5.0, 6.0, 4.5, 1.0, 9.0]
+
+    result = calculate_mid_range_metrics(human, llm)
+
+    # First 4 pairs have at least one side in [4,6], last 2 have neither
+    assert result["count"] == 4
+    assert result["pct_of_total"] == pytest.approx(4 / 6 * 100, abs=0.1)
+    assert result["alpha"] >= 0.99
+    assert result["mae"] == pytest.approx(0.0)
+
+
+def test_mid_range_metrics_insufficient_data():
+    """Fewer than 3 qualifying pairs returns insufficient_data=True."""
+    human = [5.0, 5.0, 1.0, 9.0]
+    llm = [5.0, 5.0, 1.0, 9.0]
+
+    result = calculate_mid_range_metrics(human, llm)
+
+    # Only 2 pairs in [4,6]
+    assert result["insufficient_data"] is True
+    assert result["count"] == 2
+
+
+def test_mid_range_metrics_pct_of_total():
+    """pct_of_total reflects proportion of qualifying pairs."""
+    human = [4.0, 4.5, 5.0, 5.5, 6.0, 4.0, 4.5, 5.0, 5.5, 6.0]
+    llm = [4.0, 4.5, 5.0, 5.5, 6.0, 4.0, 4.5, 5.0, 5.5, 6.0]
+
+    result = calculate_mid_range_metrics(human, llm)
+
+    assert result["count"] == 10
+    assert result["pct_of_total"] == pytest.approx(100.0)
