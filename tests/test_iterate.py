@@ -63,8 +63,10 @@ def _make_eval(
     ]
     # Compute actual weighted average
     weights = {
-        "clarity": 0.25, "value_prop": 0.25,
-        "cta_effectiveness": 0.20, "brand_voice": 0.15,
+        "clarity": 0.25,
+        "value_prop": 0.25,
+        "cta_effectiveness": 0.20,
+        "brand_voice": 0.15,
         "emotional_resonance": 0.15,
     }
     w_avg = sum(s.score * weights[s.dimension] for s in scores)
@@ -235,13 +237,23 @@ class TestIterationController:
         """Component fix drops weighted_avg by >0.5, controller falls back to full regen."""
         # Initial eval: failing but decent
         initial_eval = _make_eval(
-            "", clarity=5.0, value_prop=5.0, cta_effectiveness=5.0,
-            brand_voice=5.0, emotional_resonance=5.0, passed=False,
+            "",
+            clarity=5.0,
+            value_prop=5.0,
+            cta_effectiveness=5.0,
+            brand_voice=5.0,
+            emotional_resonance=5.0,
+            passed=False,
         )
         # After component fix: coherence broken (big drop)
         broken_eval = _make_eval(
-            "", clarity=6.0, value_prop=2.0, cta_effectiveness=2.0,
-            brand_voice=2.0, emotional_resonance=2.0, passed=False,
+            "",
+            clarity=6.0,
+            value_prop=2.0,
+            cta_effectiveness=2.0,
+            brand_voice=2.0,
+            emotional_resonance=2.0,
+            passed=False,
         )
         # After full regen: passes
         regen_eval = _make_eval("", passed=True)
@@ -332,9 +344,7 @@ class TestIterationController:
         controller.iterate(SAMPLE_BRIEF)
 
         # Extract all log_decision actions from controller calls
-        ctrl_actions = [
-            call.args[1] for call in mock_ctrl_log.call_args_list
-        ]
+        ctrl_actions = [call.args[1] for call in mock_ctrl_log.call_args_list]
 
         # Must have loop_start, generate_cycle, and at least one terminal state
         assert "loop_start" in ctrl_actions
@@ -343,3 +353,52 @@ class TestIterationController:
         # Should have either accept or reject_retry
         has_terminal = "accept" in ctrl_actions or "reject_retry" in ctrl_actions
         assert has_terminal
+
+    @patch("src.iterate.controller.log_decision")
+    @patch("src.iterate.healing.log_decision")
+    def test_diminishing_returns_early_exit(self, mock_heal_log, mock_ctrl_log, db_conn):
+        """Controller exits early when score improvement falls below CONVERGENCE_THRESHOLD."""
+        # Cycle 1: eval fails with score ~5.0
+        eval_cycle1 = _make_eval(
+            "",
+            clarity=5.0,
+            value_prop=5.0,
+            cta_effectiveness=5.0,
+            brand_voice=5.0,
+            emotional_resonance=5.0,
+            passed=False,
+        )
+        # Coherence check: tiny improvement (5.0 -> 5.1), delta 0.1 < 0.3 threshold
+        coherence_eval = _make_eval(
+            "",
+            clarity=5.1,
+            value_prop=5.1,
+            cta_effectiveness=5.1,
+            brand_voice=5.1,
+            emotional_resonance=5.1,
+            passed=False,
+        )
+
+        fixed_ad = AdCopy(
+            id="ad-fixed",
+            primary_text="Slightly improved ad.",
+            headline="Better Headline",
+            description="Better desc.",
+            cta_button="Get Started",
+            model_id="gemini-2.5-flash",
+            token_count=85,
+        )
+
+        controller, mock_gen, mock_eval = _build_controller(
+            db_conn,
+            gen_side_effect=[FAILING_AD, fixed_ad],
+            eval_side_effect=[eval_cycle1, coherence_eval],
+        )
+
+        ad, records = controller.iterate(SAMPLE_BRIEF)
+
+        assert ad is None
+        assert len(records) == 1  # One component_fix before early exit
+
+        ctrl_actions = [call.args[1] for call in mock_ctrl_log.call_args_list]
+        assert "diminishing_returns" in ctrl_actions

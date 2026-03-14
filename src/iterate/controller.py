@@ -22,6 +22,7 @@ from src.models.iteration import IterationRecord
 
 MAX_CYCLES = 3
 COHERENCE_DROP_THRESHOLD = 0.5
+CONVERGENCE_THRESHOLD = 0.3
 
 
 class State(str, Enum):
@@ -49,9 +50,7 @@ class IterationController:
         self._healer = healer
         self._conn = conn
 
-    def iterate(
-        self, brief: AdBrief
-    ) -> tuple[AdCopy | None, list[IterationRecord]]:
+    def iterate(self, brief: AdBrief) -> tuple[AdCopy | None, list[IterationRecord]]:
         """Run the iteration loop until the ad passes or max cycles reached.
 
         Returns (passing_ad_or_None, list_of_iteration_records).
@@ -61,6 +60,7 @@ class IterationController:
         ad: AdCopy | None = None
         evaluation: EvaluationResult | None = None
         pre_fix_score: float = 0.0
+        last_score: float = 0.0
         records: list[IterationRecord] = []
         feedback_context: list[str] = []
 
@@ -82,16 +82,11 @@ class IterationController:
                     cycle += 1
 
                     if cycle > MAX_CYCLES:
-                        last_avg = (
-                            evaluation.weighted_average
-                            if evaluation
-                            else 0.0
-                        )
+                        last_avg = evaluation.weighted_average if evaluation else 0.0
                         log_decision(
                             "iterate",
                             "force_fail",
-                            f"Max cycles ({MAX_CYCLES}) reached. "
-                            f"Last weighted_avg={last_avg:.2f}",
+                            f"Max cycles ({MAX_CYCLES}) reached. Last weighted_avg={last_avg:.2f}",
                             {
                                 "cycles": cycle - 1,
                                 "max_cycles": MAX_CYCLES,
@@ -148,6 +143,26 @@ class IterationController:
                                 "hard_gate_failures": evaluation.hard_gate_failures,
                             },
                         )
+                        delta = evaluation.weighted_average - last_score
+                        if cycle > 1 and delta < CONVERGENCE_THRESHOLD:
+                            log_decision(
+                                "iterate",
+                                "diminishing_returns",
+                                f"Convergence stalled at cycle {cycle}: "
+                                f"delta={delta:+.2f} "
+                                f"(from {last_score:.2f} to {evaluation.weighted_average:.2f}), "
+                                f"below {CONVERGENCE_THRESHOLD} threshold",
+                                {
+                                    "cycle": cycle,
+                                    "last_score": last_score,
+                                    "current_score": evaluation.weighted_average,
+                                    "delta": delta,
+                                    "threshold": CONVERGENCE_THRESHOLD,
+                                },
+                            )
+                            state = State.FAIL
+                            continue
+                        last_score = evaluation.weighted_average
                         pre_fix_score = evaluation.weighted_average
                         state = State.FIX
 
@@ -172,9 +187,7 @@ class IterationController:
                         continue
 
                     weak_dim = self._healer.diagnose(evaluation)
-                    feedback = self._healer.build_feedback_prompt(
-                        brief, ad, evaluation
-                    )
+                    feedback = self._healer.build_feedback_prompt(brief, ad, evaluation)
                     feedback_context.append(feedback)
 
                     log_decision(
@@ -261,6 +274,26 @@ class IterationController:
                             )
                             state = State.ACCEPT
                         else:
+                            if score_delta < CONVERGENCE_THRESHOLD:
+                                log_decision(
+                                    "iterate",
+                                    "diminishing_returns",
+                                    f"Convergence stalled after coherence check: "
+                                    f"delta={score_delta:+.2f} "
+                                    f"(from {pre_fix_score:.2f} to "
+                                    f"{coherence_eval.weighted_average:.2f}), "
+                                    f"below {CONVERGENCE_THRESHOLD} threshold",
+                                    {
+                                        "cycle": cycle,
+                                        "last_score": pre_fix_score,
+                                        "current_score": coherence_eval.weighted_average,
+                                        "delta": score_delta,
+                                        "threshold": CONVERGENCE_THRESHOLD,
+                                    },
+                                )
+                                state = State.FAIL
+                                continue
+                            last_score = coherence_eval.weighted_average
                             # Loop back to generate for next cycle
                             cycle += 1
                             if cycle > MAX_CYCLES:
@@ -325,9 +358,7 @@ class IterationController:
                         weak_dimension=weak_dim,
                         token_cost=float(ad.token_count),
                     )
-                    self._persist_iteration(
-                        record, "\n---\n".join(feedback_context)
-                    )
+                    self._persist_iteration(record, "\n---\n".join(feedback_context))
                     records.append(record)
 
                     state = State.EVALUATE
@@ -354,9 +385,7 @@ class IterationController:
         ad.id = ad_id
         return ad
 
-    def _persist_evaluation(
-        self, evaluation: EvaluationResult, ad_id: str
-    ) -> None:
+    def _persist_evaluation(self, evaluation: EvaluationResult, ad_id: str) -> None:
         """Persist all dimension scores to DB.
 
         Uses the explicit ad_id (from the DB-persisted ad) rather than
@@ -374,9 +403,7 @@ class IterationController:
                 eval_mode="iteration",
             )
 
-    def _persist_iteration(
-        self, record: IterationRecord, feedback_prompt: str
-    ) -> None:
+    def _persist_iteration(self, record: IterationRecord, feedback_prompt: str) -> None:
         """Persist an iteration record to DB."""
         insert_iteration(
             self._conn,
@@ -402,27 +429,20 @@ class IterationController:
             product_offer=brief.product_offer,
             campaign_goal=brief.campaign_goal,
             tone=brief.tone,
-            competitive_context=(
-                brief.competitive_context + "\n\n" + feedback
-            ),
+            competitive_context=(brief.competitive_context + "\n\n" + feedback),
         )
 
     @staticmethod
-    def _build_regen_brief(
-        brief: AdBrief, feedback_context: list[str]
-    ) -> AdBrief:
+    def _build_regen_brief(brief: AdBrief, feedback_context: list[str]) -> AdBrief:
         """Create a brief for full regeneration with accumulated feedback."""
         combined_feedback = (
             "PREVIOUS ITERATION FEEDBACK (use as guidance, "
-            "but regenerate the ad from scratch):\n\n"
-            + "\n---\n".join(feedback_context)
+            "but regenerate the ad from scratch):\n\n" + "\n---\n".join(feedback_context)
         )
         return AdBrief(
             audience_segment=brief.audience_segment,
             product_offer=brief.product_offer,
             campaign_goal=brief.campaign_goal,
             tone=brief.tone,
-            competitive_context=(
-                brief.competitive_context + "\n\n" + combined_feedback
-            ),
+            competitive_context=(brief.competitive_context + "\n\n" + combined_feedback),
         )
