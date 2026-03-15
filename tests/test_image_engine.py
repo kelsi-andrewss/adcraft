@@ -198,6 +198,62 @@ class TestGenerateImage:
                     "v1",
                 )
 
+    def test_empty_candidates_raises_image_generation_error(self, tmp_path):
+        """Response with empty candidates list (safety block) raises ImageGenerationError."""
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.candidates = []  # safety filter returns empty list
+
+        mock_client.models.generate_content.return_value = response
+
+        with patch.object(IMAGES_DIR.__class__, "mkdir"):
+            engine = ImageGenerationEngine(client=mock_client)
+            engine._generate_with_model = engine._generate_with_model.__wrapped__.__get__(engine)
+
+            with pytest.raises(ImageGenerationError, match="No candidates"):
+                engine._generate_with_model(
+                    FLASH_IMAGE_MODEL,
+                    _make_visual_brief(),
+                    "test-safety-block",
+                    "v1",
+                )
+
+    def test_none_candidates_raises_image_generation_error(self, tmp_path):
+        """Response with None candidates raises ImageGenerationError, not AttributeError."""
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.candidates = None
+
+        mock_client.models.generate_content.return_value = response
+
+        with patch.object(IMAGES_DIR.__class__, "mkdir"):
+            engine = ImageGenerationEngine(client=mock_client)
+            engine._generate_with_model = engine._generate_with_model.__wrapped__.__get__(engine)
+
+            with pytest.raises(ImageGenerationError, match="No candidates"):
+                engine._generate_with_model(
+                    FLASH_IMAGE_MODEL,
+                    _make_visual_brief(),
+                    "test-none-candidates",
+                    "v1",
+                )
+
+    def test_generation_config_contains_prompt_key(self, tmp_path):
+        """generation_config must contain 'prompt' key with the visual brief's prompt."""
+        mock_client = MagicMock()
+        brief = _make_visual_brief(prompt="Bright student celebrating SAT success")
+        mock_client.models.generate_content.return_value = _make_mock_response(b"img")
+
+        with patch.object(IMAGES_DIR.__class__, "mkdir"):
+            engine = ImageGenerationEngine(client=mock_client)
+            engine._generate_with_model = engine._generate_with_model.__wrapped__.__get__(engine)
+            engine._save_image = lambda data, aid, var: str(tmp_path / f"{aid}_{var}.png")
+
+            result = engine._generate_with_model(FLASH_IMAGE_MODEL, brief, "ad-cfg", "v1")
+
+        assert "prompt" in result.generation_config
+        assert result.generation_config["prompt"] == "Bright student celebrating SAT success"
+
 
 # ---------------------------------------------------------------------------
 # _save_image

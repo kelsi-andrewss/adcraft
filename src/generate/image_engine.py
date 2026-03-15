@@ -181,6 +181,13 @@ class ImageGenerationEngine:
             )
             raise
 
+        # Guard against safety-blocked responses (candidates is None or empty)
+        if not response.candidates:
+            raise ImageGenerationError(
+                f"No candidates in response from {model} for ad={ad_id} "
+                f"(possible safety filter block)"
+            )
+
         # Extract image bytes from response parts
         image_bytes = None
         for part in response.candidates[0].content.parts:
@@ -209,6 +216,7 @@ class ImageGenerationEngine:
             generation_config={
                 "aspect_ratio": visual_brief.aspect_ratio or DEFAULT_ASPECT_RATIO,
                 "image_size": DEFAULT_IMAGE_SIZE,
+                "prompt": visual_brief.prompt,
                 "negative_prompt": visual_brief.negative_prompt,
             },
         )

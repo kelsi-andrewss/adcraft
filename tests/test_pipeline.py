@@ -123,7 +123,6 @@ class TestBatchPipeline:
         mock_eval.evaluate_iteration.side_effect = [
             _failing_eval(),  # initial eval
             _passing_eval(),  # coherence check passes
-            _passing_eval(),  # pipeline's final eval call
         ]
 
         pipeline = BatchPipeline(db_path=":memory:", generator=mock_gen, evaluator=mock_eval)
@@ -134,6 +133,8 @@ class TestBatchPipeline:
 
         assert result.passed == 1
         assert result.total_cycles >= 2
+        # Verify no redundant evaluate_iteration call (MED-1): exactly 2 calls, not 3
+        assert mock_eval.evaluate_iteration.call_count == 2
 
     @patch("src.pipeline.main.log_decision")
     def test_rate_limiter_throttles(self, mock_log):

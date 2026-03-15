@@ -46,7 +46,10 @@ def _make_image_result(**overrides) -> ImageResult:
         "file_path": "/data/images/ad-001.png",
         "model_id": "gemini-2.5-flash-image",
         "cost_usd": 0.04,
-        "generation_config": {"negative_prompt": "no text overlays"},
+        "generation_config": {
+            "prompt": "vibrant SAT tutoring scene",
+            "negative_prompt": "no text overlays",
+        },
         "variant_group_id": "vg-001",
         "variant_type": "lifestyle",
     }
@@ -195,7 +198,7 @@ class TestRunVisualPipeline:
             db_conn,
             "ad-001",
             image_path="/data/images/ad-001.png",
-            visual_prompt="no text overlays",
+            visual_prompt="vibrant SAT tutoring scene",
             image_model="gemini-2.5-flash-image",
             image_cost_usd=0.04,
             variant_group_id="vg-001",
