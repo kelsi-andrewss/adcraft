@@ -101,3 +101,38 @@ class TestLogDecision:
         rows = list_decisions(db_conn)
         persisted_ctx = json.loads(rows[0]["context"])
         assert persisted_ctx == {}
+
+    def test_creates_missing_parent_directory(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "cold" / "start" / "ads.db"
+        monkeypatch.setenv("DATABASE_PATH", str(db_path))
+        assert not db_path.parent.exists()
+
+        # Patch insert_decision to isolate directory creation from schema concerns
+        monkeypatch.setattr("src.decisions.logger.insert_decision", lambda *a, **kw: "dec-test")
+
+        decision_id = log_decision("pipeline", "cold-start", "dir was missing")
+
+        assert decision_id == "dec-test"
+        assert db_path.parent.exists()
+
+    def test_context_with_datetime_and_path_serializes(self, db_conn):
+        import datetime
+        import pathlib
+
+        ctx = {
+            "generated_at": datetime.datetime(2026, 3, 15, 12, 0, 0),
+            "output_file": pathlib.Path("/tmp/ads/output.json"),
+        }
+        # Before fix: raises TypeError; after fix: succeeds with string coercion
+        decision_id = log_decision(
+            "pipeline",
+            "serialize-test",
+            "context contains non-primitive types",
+            context=ctx,
+            conn=db_conn,
+        )
+        assert decision_id is not None
+        rows = list_decisions(db_conn)
+        persisted = json.loads(rows[0]["context"])
+        assert persisted["generated_at"] == "2026-03-15 12:00:00"
+        assert persisted["output_file"] == "/tmp/ads/output.json"
