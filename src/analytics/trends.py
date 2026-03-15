@@ -53,23 +53,34 @@ def _empty_figure(title: str) -> go.Figure:
     return fig
 
 
+def _build_weighted_avg_case() -> str:
+    """Build a SQL CASE expression from DIMENSION_WEIGHTS.
+
+    Returns a fragment like:
+        CASE e.dimension
+            WHEN 'clarity' THEN 0.2
+            WHEN 'learner_benefit' THEN 0.2
+            ...
+            ELSE 0
+        END
+    """
+    branches = "\n            ".join(
+        f"WHEN '{dim}' THEN {weight}" for dim, weight in DIMENSION_WEIGHTS.items()
+    )
+    return f"CASE e.dimension\n            {branches}\n            ELSE 0 END"
+
+
 def score_distribution(db_conn: sqlite3.Connection) -> go.Figure:
     """Histogram of weighted average scores across all evaluated ads.
 
     Vertical line at pass threshold. Bars colored by pass/fail.
     """
     db_conn.row_factory = sqlite3.Row
+    case_expr = _build_weighted_avg_case()
     rows = db_conn.execute(
-        """
+        f"""
         SELECT e.ad_id,
-               SUM(e.score * CASE e.dimension
-                   WHEN 'clarity' THEN 0.20
-                   WHEN 'learner_benefit' THEN 0.20
-                   WHEN 'cta_effectiveness' THEN 0.16
-                   WHEN 'brand_voice' THEN 0.12
-                   WHEN 'student_empathy' THEN 0.12
-                   WHEN 'pedagogical_integrity' THEN 0.20
-                   ELSE 0 END) as weighted_avg
+               SUM(e.score * {case_expr}) as weighted_avg
         FROM evaluations e
         WHERE e.eval_mode = 'final' OR e.eval_mode IS NULL
         GROUP BY e.ad_id
