@@ -9,6 +9,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai.errors import APIError
 
 from src.generate.engine import GENERATION_SCHEMA, GenerationEngine
 from src.models.ad import AdCopy
@@ -103,45 +104,6 @@ def test_structured_output_schema_passed(mock_log):
     config = call_kwargs.kwargs.get("config") or call_kwargs[1].get("config")
     assert config.response_mime_type == "application/json"
     assert config.response_json_schema == GENERATION_SCHEMA
-
-
-# ---------------------------------------------------------------------------
-# Tests: safety filter retry
-# ---------------------------------------------------------------------------
-
-
-@patch("src.generate.engine.log_decision")
-def test_safety_filter_retry(mock_log):
-    """Safety filter block triggers retry, then succeeds."""
-    mock_client = MagicMock()
-    good_response = _mock_response(_make_generation_response())
-    mock_client.models.generate_content.side_effect = [
-        Exception("Safety filter blocked"),
-        good_response,
-    ]
-
-    engine = _make_engine(mock_client)
-    result = engine.generate(_make_brief())
-
-    assert isinstance(result, AdCopy)
-    assert mock_client.models.generate_content.call_count == 2
-
-
-@patch("src.generate.engine.log_decision")
-def test_safety_filter_max_retries_raises(mock_log):
-    """3 consecutive safety blocks raises exception."""
-    mock_client = MagicMock()
-    mock_client.models.generate_content.side_effect = [
-        Exception("Safety filter blocked"),
-        Exception("Safety filter blocked"),
-        Exception("Safety filter blocked"),
-    ]
-
-    engine = _make_engine(mock_client)
-    with pytest.raises(Exception, match="Safety filter blocked"):
-        engine.generate(_make_brief())
-
-    assert mock_client.models.generate_content.call_count == 3
 
 
 # ---------------------------------------------------------------------------
@@ -338,3 +300,77 @@ def test_prompt_omits_competitive_context_when_empty(mock_log):
     call_args = mock_client.models.generate_content.call_args
     prompt = call_args.kwargs.get("contents") or call_args[1].get("contents")
     assert "COMPETITIVE CONTEXT:" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# Tests: retry behavior (gemini_retry — transient vs. non-transient)
+# ---------------------------------------------------------------------------
+
+
+def _make_api_error(code: int) -> APIError:
+    """Construct a minimal APIError with the given HTTP status code."""
+    err = APIError.__new__(APIError)
+    err.code = code
+    err.status = str(code)
+    err.message = f"HTTP {code}"
+    return err
+
+
+@patch("src.generate.engine.log_decision")
+def test_retries_transient_429(mock_log):
+    """APIError 429 is retried; succeeds on second attempt."""
+    mock_client = MagicMock()
+    good_response = _mock_response(_make_generation_response())
+    mock_client.models.generate_content.side_effect = [
+        _make_api_error(429),
+        good_response,
+    ]
+
+    engine = _make_engine(mock_client)
+    result = engine.generate(_make_brief())
+
+    assert isinstance(result, AdCopy)
+    assert mock_client.models.generate_content.call_count == 2
+
+
+@patch("src.generate.engine.log_decision")
+def test_retries_transient_503(mock_log):
+    """APIError 503 is retried; succeeds on second attempt."""
+    mock_client = MagicMock()
+    good_response = _mock_response(_make_generation_response())
+    mock_client.models.generate_content.side_effect = [
+        _make_api_error(503),
+        good_response,
+    ]
+
+    engine = _make_engine(mock_client)
+    result = engine.generate(_make_brief())
+
+    assert isinstance(result, AdCopy)
+    assert mock_client.models.generate_content.call_count == 2
+
+
+@patch("src.generate.engine.log_decision")
+def test_does_not_retry_non_transient_api_error(mock_log):
+    """APIError 403 (auth) raises immediately — no retry."""
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = _make_api_error(403)
+
+    engine = _make_engine(mock_client)
+    with pytest.raises(APIError):
+        engine.generate(_make_brief())
+
+    assert mock_client.models.generate_content.call_count == 1
+
+
+@patch("src.generate.engine.log_decision")
+def test_does_not_retry_value_error(mock_log):
+    """Non-API exceptions (ValueError) propagate immediately — no retry."""
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = ValueError("bad schema")
+
+    engine = _make_engine(mock_client)
+    with pytest.raises(ValueError, match="bad schema"):
+        engine.generate(_make_brief())
+
+    assert mock_client.models.generate_content.call_count == 1

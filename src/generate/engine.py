@@ -12,14 +12,10 @@ import os
 
 from google import genai
 from google.genai import types
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
+from google.genai.errors import APIError
 
 from src.decisions.logger import log_decision
+from src.evaluate.utils import gemini_retry, is_retriable
 from src.intel.analyzer import CompetitorPatterns
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
@@ -244,14 +240,13 @@ Generate the ad copy now."""
         """
         return self._call_gemini_with_retry(prompt)
 
-    @retry(
-        retry=retry_if_exception_type((Exception,)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=60),
-        reraise=True,
-    )
+    @gemini_retry
     def _call_gemini_with_retry(self, prompt: str) -> tuple[dict, int]:
-        """Inner call with tenacity retry decorator."""
+        """Inner call with gemini_retry decorator.
+
+        Retries only transient APIErrors (408/429/500/502/503).
+        Non-transient APIErrors and non-API exceptions propagate immediately.
+        """
         try:
             response = self._client.models.generate_content(
                 model=self._model,
@@ -263,12 +258,13 @@ Generate the ad copy now."""
                     safety_settings=SAFETY_SETTINGS,
                 ),
             )
-        except Exception as exc:
+        except APIError as exc:
+            retriable = is_retriable(exc)
             log_decision(
                 "generator",
-                "api_retry",
-                f"Gemini call failed, will retry: {type(exc).__name__}: {exc}",
-                {"model": self._model, "error": str(exc)},
+                "api_retry" if retriable else "api_error",
+                f"Gemini call failed ({exc.code}), {'will retry' if retriable else 'non-retriable'}: {exc}",
+                {"model": self._model, "error": str(exc), "code": exc.code, "retriable": retriable},
             )
             raise
 
