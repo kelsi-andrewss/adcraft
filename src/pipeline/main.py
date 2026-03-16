@@ -400,6 +400,7 @@ class BatchPipeline:
                 result.total_cycles += len(records) + 1  # +1 for initial gen
 
                 if ad is not None:
+                    assert final_eval is not None, "iterate() returned ad without evaluation"
                     result.passed += 1
                     result.scores.append(final_eval.weighted_average)
                     result.total_tokens += ad.token_count + final_eval.token_count
