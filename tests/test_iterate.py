@@ -209,11 +209,13 @@ class TestIterationController:
             eval_side_effect=[passing_eval],
         )
 
-        ad, records = controller.iterate(SAMPLE_BRIEF)
+        ad, records, evaluation = controller.iterate(SAMPLE_BRIEF)
 
         assert ad is not None
         assert ad.headline == PASSING_AD.headline
         assert len(records) == 0  # No iteration records for first-pass accept
+        assert evaluation is not None
+        assert evaluation.passed_threshold is True
         mock_gen.generate.assert_called_once()
 
     @patch("src.iterate.controller.log_decision")
@@ -240,12 +242,13 @@ class TestIterationController:
             eval_side_effect=[failing_eval, improved_eval],
         )
 
-        ad, records = controller.iterate(SAMPLE_BRIEF)
+        ad, records, evaluation = controller.iterate(SAMPLE_BRIEF)
 
         assert ad is not None
         assert len(records) == 1
         assert records[0].action_type == "component_fix"
         assert records[0].weak_dimension == "clarity"
+        assert evaluation is not None
 
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
@@ -292,13 +295,14 @@ class TestIterationController:
             eval_side_effect=[initial_eval, broken_eval, regen_eval],
         )
 
-        ad, records = controller.iterate(SAMPLE_BRIEF)
+        ad, records, evaluation = controller.iterate(SAMPLE_BRIEF)
 
         assert ad is not None
         # Should have component_fix then full_regen records
         action_types = [r.action_type for r in records]
         assert "component_fix" in action_types
         assert "full_regen" in action_types
+        assert evaluation is not None
 
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
@@ -331,10 +335,11 @@ class TestIterationController:
             eval_side_effect=eval_results,
         )
 
-        ad, records = controller.iterate(SAMPLE_BRIEF)
+        ad, records, evaluation = controller.iterate(SAMPLE_BRIEF)
 
         assert ad is None
         assert len(records) > 0  # At least some iteration attempts
+        assert evaluation is not None  # Final eval is always returned even on fail
 
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
@@ -359,7 +364,7 @@ class TestIterationController:
             eval_side_effect=[failing_eval, passing_eval],
         )
 
-        controller.iterate(SAMPLE_BRIEF)
+        ad, records, evaluation = controller.iterate(SAMPLE_BRIEF)
 
         # Extract all log_decision actions from controller calls
         ctrl_actions = [call.args[1] for call in mock_ctrl_log.call_args_list]
@@ -375,8 +380,14 @@ class TestIterationController:
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
     def test_diminishing_returns_early_exit(self, mock_heal_log, mock_ctrl_log, db_conn):
-        """Controller exits early when score improvement falls below CONVERGENCE_THRESHOLD."""
-        # Cycle 1: eval fails with score ~5.0
+        """Controller exits early when score improvement falls below CONVERGENCE_THRESHOLD.
+
+        The cycle > 1 guard (MED-4) means convergence only triggers from cycle 2 onward.
+        Flow: cycle 1 EVALUATE (fail, big delta -> no exit) -> FIX -> COHERENCE_CHECK
+        (pass coherence, still failing, cycle==1 -> no exit, loop to EVALUATE at cycle 2)
+        -> cycle 2 EVALUATE (fail, tiny delta < threshold AND cycle > 1 -> FAIL).
+        """
+        # Cycle 1: eval fails with score ~5.0 (large delta from 0.0 -> no convergence exit)
         eval_cycle1 = _make_eval(
             "",
             clarity=5.0,
@@ -387,7 +398,7 @@ class TestIterationController:
             pedagogical_integrity=5.0,
             passed=False,
         )
-        # Coherence check: tiny improvement (5.0 -> 5.1), delta 0.1 < 0.3 threshold
+        # Coherence check cycle 1: tiny improvement (5.0 -> 5.1), but cycle==1 so no exit
         coherence_eval = _make_eval(
             "",
             clarity=5.1,
@@ -396,6 +407,18 @@ class TestIterationController:
             brand_voice=5.1,
             student_empathy=5.1,
             pedagogical_integrity=5.1,
+            passed=False,
+        )
+        # Cycle 2 EVALUATE: tiny improvement from last_score 5.1 -> ~5.15
+        # delta=0.05 < 0.3 threshold AND cycle==2 > 1 -> triggers diminishing_returns exit
+        eval_cycle2 = _make_eval(
+            "",
+            clarity=5.15,
+            learner_benefit=5.15,
+            cta_effectiveness=5.15,
+            brand_voice=5.15,
+            student_empathy=5.15,
+            pedagogical_integrity=5.15,
             passed=False,
         )
 
@@ -412,13 +435,14 @@ class TestIterationController:
         controller, mock_gen, mock_eval = _build_controller(
             db_conn,
             gen_side_effect=[FAILING_AD, fixed_ad],
-            eval_side_effect=[eval_cycle1, coherence_eval],
+            eval_side_effect=[eval_cycle1, coherence_eval, eval_cycle2],
         )
 
-        ad, records = controller.iterate(SAMPLE_BRIEF)
+        ad, records, evaluation = controller.iterate(SAMPLE_BRIEF)
 
         assert ad is None
         assert len(records) == 1  # One component_fix before early exit
+        assert evaluation is not None  # Final eval returned even on diminishing-returns exit
 
         ctrl_actions = [call.args[1] for call in mock_ctrl_log.call_args_list]
         assert "diminishing_returns" in ctrl_actions

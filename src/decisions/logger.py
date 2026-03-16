@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from pathlib import Path
 
 from src.db.queries import insert_decision
 from src.models.decision import DecisionEntry
@@ -41,11 +42,13 @@ def log_decision(
         agent_id=agent_id,
     )
 
-    context_json = json.dumps(entry.model_dump()["context"])
+    context_json = json.dumps(entry.model_dump()["context"], default=str)
 
     owns_conn = conn is None
     if owns_conn:
         db_path = os.environ.get("DATABASE_PATH", "data/ads.db")
+        if db_path != ":memory:":
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(db_path)
         conn.execute("PRAGMA foreign_keys=ON")
 

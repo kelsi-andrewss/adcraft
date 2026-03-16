@@ -50,10 +50,16 @@ class IterationController:
         self._healer = healer
         self._conn = conn
 
-    def iterate(self, brief: AdBrief) -> tuple[AdCopy | None, list[IterationRecord]]:
+    def iterate(
+        self, brief: AdBrief
+    ) -> tuple[AdCopy | None, list[IterationRecord], EvaluationResult | None]:
         """Run the iteration loop until the ad passes or max cycles reached.
 
-        Returns (passing_ad_or_None, list_of_iteration_records).
+        Returns (passing_ad_or_None, list_of_iteration_records, final_evaluation_or_None).
+        evaluation is None only if no evaluation was ever completed (impossible in
+        normal flow since GENERATE always leads to EVALUATE before any exit).
+        In practice, evaluation is always set when ad is not None, and is the last
+        EvaluationResult that drove the accept/fail decision.
         """
         state = State.GENERATE
         cycle = 0
@@ -274,7 +280,7 @@ class IterationController:
                             )
                             state = State.ACCEPT
                         else:
-                            if score_delta < CONVERGENCE_THRESHOLD:
+                            if cycle > 1 and score_delta < CONVERGENCE_THRESHOLD:
                                 log_decision(
                                     "iterate",
                                     "diminishing_returns",
@@ -364,8 +370,8 @@ class IterationController:
                     state = State.EVALUATE
 
         if state == State.ACCEPT:
-            return ad, records
-        return None, records
+            return ad, records, evaluation
+        return None, records, evaluation
 
     # ------------------------------------------------------------------
     # Helpers

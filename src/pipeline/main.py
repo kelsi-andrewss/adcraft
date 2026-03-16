@@ -295,7 +295,7 @@ class BatchPipeline:
                             self._conn,
                             ad.id,
                             image_path=variant.file_path,
-                            visual_prompt=variant.generation_config.get("negative_prompt", ""),
+                            visual_prompt=variant.generation_config.get("prompt", ""),
                             image_model=variant.model_id,
                             image_cost_usd=variant.cost_usd,
                             variant_group_id=variant.variant_group_id,
@@ -395,14 +395,13 @@ class BatchPipeline:
 
             try:
                 self._rate_limiter.acquire()
-                ad, records = self._controller.iterate(brief)
+                ad, records, final_eval = self._controller.iterate(brief)
 
                 result.total_cycles += len(records) + 1  # +1 for initial gen
 
                 if ad is not None:
+                    assert final_eval is not None, "iterate() returned ad without evaluation"
                     result.passed += 1
-                    # Get the final evaluation score
-                    final_eval = self._evaluator.evaluate_iteration(ad)
                     result.scores.append(final_eval.weighted_average)
                     result.total_tokens += ad.token_count + final_eval.token_count
                     for rec in records:
