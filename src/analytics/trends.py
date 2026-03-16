@@ -53,13 +53,23 @@ def _empty_figure(title: str) -> go.Figure:
     return fig
 
 
+LEGACY_DIMENSION_MAP: dict[str, str] = {
+    "value_prop": "learner_benefit",
+    "emotional_resonance": "student_empathy",
+}
+
+
 def _build_weighted_avg_case() -> str:
     """Build a SQL CASE expression from DIMENSION_WEIGHTS.
+
+    Includes mappings for legacy dimension names (value_prop, emotional_resonance)
+    so older evaluations still contribute to weighted averages.
 
     Returns a fragment like:
         CASE e.dimension
             WHEN 'clarity' THEN 0.2
             WHEN 'learner_benefit' THEN 0.2
+            WHEN 'value_prop' THEN 0.2
             ...
             ELSE 0
         END
@@ -67,10 +77,15 @@ def _build_weighted_avg_case() -> str:
     assert all(
         isinstance(k, str) and isinstance(v, (int, float)) for k, v in DIMENSION_WEIGHTS.items()
     )
-    branches = "\n            ".join(
-        f"WHEN '{dim}' THEN {weight}" for dim, weight in DIMENSION_WEIGHTS.items()
-    )
-    return f"CASE e.dimension\n            {branches}\n            ELSE 0 END"
+    branches = []
+    for dim, weight in DIMENSION_WEIGHTS.items():
+        branches.append(f"WHEN '{dim}' THEN {weight}")
+    for legacy, current in LEGACY_DIMENSION_MAP.items():
+        weight = DIMENSION_WEIGHTS.get(current)
+        if weight is not None:
+            branches.append(f"WHEN '{legacy}' THEN {weight}")
+    joined = "\n            ".join(branches)
+    return f"CASE e.dimension\n            {joined}\n            ELSE 0 END"
 
 
 def score_distribution(db_conn: sqlite3.Connection) -> go.Figure:
@@ -84,8 +99,15 @@ def score_distribution(db_conn: sqlite3.Connection) -> go.Figure:
         f"""
         SELECT e.ad_id,
                SUM(e.score * {case_expr}) as weighted_avg
-        FROM evaluations e
-        WHERE e.eval_mode = 'final' OR e.eval_mode IS NULL
+        FROM (
+            SELECT ad_id, dimension, score,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY ad_id, dimension
+                       ORDER BY created_at DESC
+                   ) as rn
+            FROM evaluations
+        ) e
+        WHERE e.rn = 1
         GROUP BY e.ad_id
         """
     ).fetchall()
@@ -186,23 +208,42 @@ def convergence_curves(db_conn: sqlite3.Connection) -> go.Figure:
 
 
 def dimension_breakdown(db_conn: sqlite3.Connection) -> go.Figure:
-    """Grouped bar chart of average score per dimension."""
+    """Grouped bar chart of average score per dimension.
+
+    Maps legacy dimension names (value_prop, emotional_resonance) to their
+    current equivalents before aggregating, so all historical data is included.
+    """
     db_conn.row_factory = sqlite3.Row
     rows = db_conn.execute(
         """
-        SELECT dimension, AVG(score) as avg_score
-        FROM evaluations
-        WHERE eval_mode = 'final' OR eval_mode IS NULL
-        GROUP BY dimension
-        ORDER BY dimension
+        SELECT dimension, score
+        FROM (
+            SELECT ad_id, dimension, score,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY ad_id, dimension
+                       ORDER BY created_at DESC
+                   ) as rn
+            FROM evaluations
+        )
+        WHERE rn = 1
         """
     ).fetchall()
 
     if not rows:
         return _empty_figure("Dimension Breakdown")
 
-    dimensions = [r["dimension"] for r in rows]
-    avg_scores = [r["avg_score"] for r in rows]
+    dim_scores: dict[str, list[float]] = {}
+    for r in rows:
+        dim = r["dimension"]
+        dim = LEGACY_DIMENSION_MAP.get(dim, dim)
+        if dim in DIMENSION_WEIGHTS:
+            dim_scores.setdefault(dim, []).append(r["score"])
+
+    if not dim_scores:
+        return _empty_figure("Dimension Breakdown")
+
+    dimensions = sorted(dim_scores.keys())
+    avg_scores = [sum(dim_scores[d]) / len(dim_scores[d]) for d in dimensions]
     colors = [DIMENSION_COLORS.get(d, PRIMARY_COLOR) for d in dimensions]
 
     fig = go.Figure(
@@ -394,9 +435,16 @@ def mid_range_performance(db_conn: sqlite3.Connection) -> go.Figure:
     db_conn.row_factory = sqlite3.Row
     rows = db_conn.execute(
         """
-        SELECT e.dimension, e.score, e.ad_id
-        FROM evaluations e
-        WHERE e.eval_mode = 'final' OR e.eval_mode IS NULL
+        SELECT dimension, score, ad_id
+        FROM (
+            SELECT ad_id, dimension, score,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY ad_id, dimension
+                       ORDER BY created_at DESC
+                   ) as rn
+            FROM evaluations
+        )
+        WHERE rn = 1
         """
     ).fetchall()
 

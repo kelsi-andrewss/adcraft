@@ -382,6 +382,9 @@ class IterationController:
             cta_button=ad.cta_button,
             model_id=ad.model_id,
             temperature=ad.generation_config.get("temperature"),
+            input_tokens=ad.input_tokens,
+            output_tokens=ad.output_tokens,
+            cost_usd=ad.cost_usd,
         )
         ad.id = ad_id
         return ad
@@ -391,7 +394,13 @@ class IterationController:
 
         Uses the explicit ad_id (from the DB-persisted ad) rather than
         evaluation.ad_id, which may not match after mock or re-assignment.
+        Splits token counts and cost evenly across dimension rows so that
+        SUM aggregations produce the correct total.
         """
+        n_scores = len(evaluation.scores) or 1
+        per_dim_input = evaluation.input_tokens // n_scores
+        per_dim_output = evaluation.output_tokens // n_scores
+        per_dim_cost = evaluation.cost_usd / n_scores if evaluation.cost_usd is not None else None
         for s in evaluation.scores:
             insert_evaluation(
                 self._conn,
@@ -402,6 +411,9 @@ class IterationController:
                 confidence=s.confidence,
                 evaluator_model=evaluation.evaluator_model,
                 eval_mode="iteration",
+                input_tokens=per_dim_input,
+                output_tokens=per_dim_output,
+                cost_usd=per_dim_cost,
             )
 
     def _persist_iteration(self, record: IterationRecord, feedback_prompt: str) -> None:

@@ -560,7 +560,13 @@ with tab_cost:
                 "Output Tokens",
                 "API Calls",
             ]
+            df_models = df_models.fillna(0)
             st.dataframe(df_models, use_container_width=True, hide_index=True)
+            if total_spend == 0 and total_ads > 0:
+                st.caption(
+                    "Cost data is not yet recorded for existing ads. "
+                    "Re-run the pipeline to populate token and cost tracking."
+                )
         else:
             st.caption("No per-model cost data available.")
 
@@ -768,7 +774,7 @@ with tab_gallery:
             for vg_id, variants in variant_groups.items():
                 with st.container(border=True):
                     st.markdown(f"**Variant Group** `{vg_id[:12]}...`")
-                    cols = st.columns(len(variants))
+                    cols = st.columns(2)
 
                     # Determine winner: highest avg visual score
                     variant_scores = []
@@ -793,7 +799,7 @@ with tab_gallery:
                             vtype = variant.get("variant_type") or "variant"
                             st.caption(vtype.replace("_", " ").title())
 
-                            # Image
+                            # Image — fill the column (50% of page width)
                             img_path = variant.get("image_path", "")
                             if img_path and Path(img_path).exists():
                                 st.image(img_path, use_container_width=True)
@@ -816,62 +822,60 @@ with tab_gallery:
                                 )
 
         # =============================================================
-        # Individual Ad Cards (ungrouped or all if no variant groups)
+        # Individual Ad Cards — 3-column grid
         # =============================================================
         cards_to_show = ungrouped if variant_groups else filtered_ads
         if cards_to_show:
             if variant_groups:
                 st.subheader("Individual Creatives")
-            for ci, ad in enumerate(cards_to_show):
-                evals = ad_evals_map.get(ad["id"], [])
-                with st.container(border=True):
-                    img_col, copy_col = st.columns([1, 2])
+            for row_start in range(0, len(cards_to_show), 3):
+                row_ads = cards_to_show[row_start : row_start + 3]
+                grid_cols = st.columns(3)
+                for col, ad in zip(grid_cols, row_ads):
+                    evals = ad_evals_map.get(ad["id"], [])
+                    with col:
+                        with st.container(border=True):
+                            img_path = ad.get("image_path", "")
+                            if img_path and Path(img_path).exists():
+                                st.image(img_path, use_container_width=True)
+                            else:
+                                st.caption("Image file not found")
 
-                    with img_col:
-                        img_path = ad.get("image_path", "")
-                        if img_path and Path(img_path).exists():
-                            st.image(img_path, use_container_width=True)
-                        else:
-                            st.caption("Image file not found")
+                            st.markdown(f"**{ad.get('headline', '')}**")
+                            st.caption(
+                                f"{ad.get('image_model', 'N/A')} | "
+                                f"${ad.get('image_cost_usd', 0.0):.4f}"
+                            )
 
-                        # Image metadata
-                        st.caption(
-                            f"Model: {ad.get('image_model', 'N/A')} | "
-                            f"Cost: ${ad.get('image_cost_usd', 0.0):.4f}"
-                        )
-                        if ad.get("variant_type"):
-                            st.caption(f"Variant: {ad['variant_type'].replace('_', ' ').title()}")
+                            # Visual evaluation scores
+                            visual_evals = [
+                                e for e in evals if e.get("dimension") in _VISUAL_DIMENSIONS
+                            ]
+                            if visual_evals:
+                                score_cols = st.columns(3)
+                                for di, dim in enumerate(sorted(_VISUAL_DIMENSIONS)):
+                                    dim_score = next(
+                                        (
+                                            e["score"]
+                                            for e in visual_evals
+                                            if e.get("dimension") == dim
+                                        ),
+                                        None,
+                                    )
+                                    score_cols[di].metric(
+                                        dim.replace("_", " ").title(),
+                                        f"{dim_score:.1f}" if dim_score is not None else "N/A",
+                                    )
 
-                    with copy_col:
-                        st.markdown(f"### {ad.get('headline', '')}")
-                        st.markdown(ad.get("primary_text", ""))
-                        if ad.get("description"):
-                            st.caption(ad["description"])
-                        if ad.get("cta_button"):
-                            st.markdown(f"**CTA:** {ad['cta_button']}")
-
-                        # Visual evaluation scores
-                        visual_evals = [
-                            e for e in evals if e.get("dimension") in _VISUAL_DIMENSIONS
-                        ]
-                        if visual_evals:
-                            score_cols = st.columns(3)
-                            for di, dim in enumerate(sorted(_VISUAL_DIMENSIONS)):
-                                dim_score = next(
-                                    (e["score"] for e in visual_evals if e.get("dimension") == dim),
-                                    None,
-                                )
-                                score_cols[di].metric(
-                                    dim.replace("_", " ").title(),
-                                    f"{dim_score:.1f}" if dim_score is not None else "N/A",
-                                )
-
-                        # Overall visual average
-                        v_avg = _visual_avg(evals)
-                        if v_avg is not None:
-                            st.markdown(f"**Visual Avg:** {v_avg:.2f}")
-
-                        # Composed text score
-                        composed = _compute_weighted_score(evals)
-                        if composed is not None:
-                            st.markdown(f"**Composed Score:** {composed:.2f}")
+                            # Overall scores
+                            v_avg = _visual_avg(evals)
+                            composed = _compute_weighted_score(evals)
+                            score_line = ""
+                            if v_avg is not None:
+                                score_line += f"Visual: {v_avg:.1f}"
+                            if composed is not None:
+                                if score_line:
+                                    score_line += " | "
+                                score_line += f"Composed: {composed:.1f}"
+                            if score_line:
+                                st.caption(score_line)
