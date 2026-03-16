@@ -14,6 +14,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
+from src.analytics.cost import calculate_cost
 from src.decisions.logger import log_decision
 from src.evaluate.utils import gemini_retry, is_retriable
 from src.intel.analyzer import CompetitorPatterns
@@ -129,7 +130,8 @@ class GenerationEngine:
             brief = self._inject_competitor_context(brief, competitor_patterns)
 
         prompt = self._build_prompt(brief)
-        raw, token_count = self._call_gemini(prompt)
+        raw, token_count, input_tokens, output_tokens = self._call_gemini(prompt)
+        cost_usd = calculate_cost(self._model, input_tokens, output_tokens)
 
         ad = AdCopy(
             primary_text=raw["primary_text"],
@@ -142,6 +144,9 @@ class GenerationEngine:
                 "safety_settings": "BLOCK_ONLY_HIGH",
             },
             token_count=token_count,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost_usd,
         )
 
         log_decision(
@@ -240,15 +245,15 @@ INSTRUCTIONS:
 
 Generate the ad copy now."""
 
-    def _call_gemini(self, prompt: str) -> tuple[dict, int]:
+    def _call_gemini(self, prompt: str) -> tuple[dict, int, int, int]:
         """Call Gemini with structured output and retry logic.
 
-        Returns (parsed_response_dict, total_token_count).
+        Returns (parsed_response_dict, total_token_count, input_tokens, output_tokens).
         """
         return self._call_gemini_with_retry(prompt)
 
     @gemini_retry
-    def _call_gemini_with_retry(self, prompt: str) -> tuple[dict, int]:
+    def _call_gemini_with_retry(self, prompt: str) -> tuple[dict, int, int, int]:
         """Inner call with gemini_retry decorator.
 
         Retries only transient APIErrors (408/429/500/502/503).
@@ -284,9 +289,13 @@ Generate the ad copy now."""
             raise
 
         token_count = 0
+        input_tokens = 0
+        output_tokens = 0
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             meta = response.usage_metadata
             token_count = getattr(meta, "total_token_count", 0) or 0
+            input_tokens = getattr(meta, "prompt_token_count", 0) or 0
+            output_tokens = getattr(meta, "candidates_token_count", 0) or 0
 
         parsed = json.loads(response.text)
-        return parsed, token_count
+        return parsed, token_count, input_tokens, output_tokens

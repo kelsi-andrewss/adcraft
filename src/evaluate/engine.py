@@ -19,6 +19,7 @@ from google.genai import types
 from google.genai.errors import APIError
 from PIL import Image as PILImage
 
+from src.analytics.cost import calculate_cost
 from src.decisions.logger import log_decision
 from src.evaluate.rubrics import (
     ALL_DIMENSIONS_SCHEMA,
@@ -96,7 +97,7 @@ class EvaluationEngine:
             cta_button=ad_copy.cta_button,
         )
 
-        raw, token_count = (
+        raw, token_count, input_tokens, output_tokens = (
             self._call_claude(prompt, ALL_DIMENSIONS_SCHEMA)
             if self._is_claude
             else self._call_gemini(prompt, ALL_DIMENSIONS_SCHEMA)
@@ -119,7 +120,9 @@ class EvaluationEngine:
                 {"ad_id": ad_copy.id, "dimension": dim, "score": score.score, "mode": "iteration"},
             )
 
-        return self._compute_result(ad_copy.id, scores, token_count, mode="iteration")
+        return self._compute_result(
+            ad_copy.id, scores, token_count, input_tokens, output_tokens, mode="iteration"
+        )
 
     def evaluate_final(self, ad_copy: AdCopy) -> EvaluationResult:
         """Score each of 6 dimensions in a separate API call (precise mode)."""
@@ -132,6 +135,8 @@ class EvaluationEngine:
 
         scores: list[DimensionScore] = []
         total_tokens = 0
+        total_input_tokens = 0
+        total_output_tokens = 0
 
         for dim in DIMENSIONS:
             prompt = build_single_dimension_prompt(
@@ -142,12 +147,14 @@ class EvaluationEngine:
                 cta_button=ad_copy.cta_button,
             )
 
-            raw, token_count = (
+            raw, token_count, input_tokens, output_tokens = (
                 self._call_claude(prompt, SINGLE_DIMENSION_SCHEMA)
                 if self._is_claude
                 else self._call_gemini(prompt, SINGLE_DIMENSION_SCHEMA)
             )
             total_tokens += token_count
+            total_input_tokens += input_tokens
+            total_output_tokens += output_tokens
 
             score = DimensionScore(
                 dimension=dim,
@@ -163,7 +170,9 @@ class EvaluationEngine:
                 {"ad_id": ad_copy.id, "dimension": dim, "score": score.score, "mode": "final"},
             )
 
-        return self._compute_result(ad_copy.id, scores, total_tokens, mode="final")
+        return self._compute_result(
+            ad_copy.id, scores, total_tokens, total_input_tokens, total_output_tokens, mode="final"
+        )
 
     def evaluate_visual(
         self,
@@ -209,7 +218,9 @@ class EvaluationEngine:
             prompt_text = build_visual_all_dimensions_prompt()
             contents: list = [prompt_text, image, ad_copy_text]
 
-            raw, token_count = self._call_gemini_multimodal(contents, VISUAL_ALL_DIMENSIONS_SCHEMA)
+            raw, token_count, _in, _out = self._call_gemini_multimodal(
+                contents, VISUAL_ALL_DIMENSIONS_SCHEMA
+            )
             total_tokens += token_count
 
             for dim in VISUAL_DIMENSIONS:
@@ -237,7 +248,7 @@ class EvaluationEngine:
                 prompt_text = build_visual_single_dimension_prompt(dim)
                 contents = [prompt_text, image, ad_copy_text]
 
-                raw, token_count = self._call_gemini_multimodal(
+                raw, token_count, _in, _out = self._call_gemini_multimodal(
                     contents, VISUAL_SINGLE_DIMENSION_SCHEMA
                 )
                 total_tokens += token_count
@@ -282,7 +293,7 @@ class EvaluationEngine:
     # ------------------------------------------------------------------
 
     @claude_retry
-    def _call_claude(self, prompt: str, schema: dict) -> tuple[dict, int]:
+    def _call_claude(self, prompt: str, schema: dict) -> tuple[dict, int, int, int]:
         """Call Claude via litellm.completion with JSON response_format."""
         schema_keys = list(schema.get("properties", {}).keys())
         schema_hint = f"\n\nYour response MUST be a JSON object with these keys: {schema_keys}"
@@ -317,19 +328,23 @@ class EvaluationEngine:
             raise
 
         token_count = response.usage.total_tokens
+        input_tokens = response.usage.prompt_tokens
+        output_tokens = response.usage.completion_tokens
         parsed = json.loads(response.choices[0].message.content)
 
         missing = [k for k in schema.get("required", []) if k not in parsed]
         if missing:
             raise ValueError(f"Claude response missing required keys: {missing}")
 
-        return parsed, token_count
+        return parsed, token_count, input_tokens, output_tokens
 
     def _compute_result(
         self,
         ad_id: str,
         scores: list[DimensionScore],
         token_count: int,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
         *,
         mode: str,
     ) -> EvaluationResult:
@@ -361,6 +376,7 @@ class EvaluationEngine:
                 )
 
         passed = weighted_avg >= PASSING_THRESHOLD and len(hard_gate_failures) == 0
+        cost_usd = calculate_cost(self._model, input_tokens, output_tokens)
 
         log_decision(
             "evaluator",
@@ -384,13 +400,16 @@ class EvaluationEngine:
             hard_gate_failures=hard_gate_failures,
             evaluator_model=self._model,
             token_count=token_count,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost_usd,
         )
 
     @gemini_retry
-    def _call_gemini(self, prompt: str, schema: dict) -> tuple[dict, int]:
+    def _call_gemini(self, prompt: str, schema: dict) -> tuple[dict, int, int, int]:
         """Call Gemini with structured output and retry logic.
 
-        Returns (parsed_response_dict, total_token_count).
+        Returns (parsed_response_dict, total_token_count, input_tokens, output_tokens).
         """
         try:
             response = self._client.models.generate_content(
@@ -428,21 +447,25 @@ class EvaluationEngine:
             raise
 
         token_count = 0
+        input_tokens = 0
+        output_tokens = 0
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             meta = response.usage_metadata
             token_count = getattr(meta, "total_token_count", 0) or 0
+            input_tokens = getattr(meta, "prompt_token_count", 0) or 0
+            output_tokens = getattr(meta, "candidates_token_count", 0) or 0
 
         parsed = json.loads(response.text)
-        return parsed, token_count
+        return parsed, token_count, input_tokens, output_tokens
 
     @gemini_retry
-    def _call_gemini_multimodal(self, contents: list, schema: dict) -> tuple[dict, int]:
+    def _call_gemini_multimodal(self, contents: list, schema: dict) -> tuple[dict, int, int, int]:
         """Call Gemini with multimodal content list and structured output.
 
         Similar to _call_gemini but accepts a content list (mixed text + image
         parts) instead of a single prompt string.
 
-        Returns (parsed_response_dict, total_token_count).
+        Returns (parsed_response_dict, total_token_count, input_tokens, output_tokens).
         """
         try:
             response = self._client.models.generate_content(
@@ -481,9 +504,13 @@ class EvaluationEngine:
             raise
 
         token_count = 0
+        input_tokens = 0
+        output_tokens = 0
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             meta = response.usage_metadata
             token_count = getattr(meta, "total_token_count", 0) or 0
+            input_tokens = getattr(meta, "prompt_token_count", 0) or 0
+            output_tokens = getattr(meta, "candidates_token_count", 0) or 0
 
         parsed = json.loads(response.text)
-        return parsed, token_count
+        return parsed, token_count, input_tokens, output_tokens

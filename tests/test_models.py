@@ -60,6 +60,9 @@ class TestAdCopy:
             "model_id": "gemini-2.5-flash",
             "generation_config": {"temperature": 0.7},
             "token_count": 150,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
         }
         ad = AdCopy.model_validate(data)
         dumped = ad.model_dump()
@@ -116,6 +119,9 @@ class TestEvaluationResult:
             "hard_gate_failures": [],
             "evaluator_model": "gemini-2.5-pro",
             "token_count": 500,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
         }
         result = EvaluationResult.model_validate(data)
         dumped = result.model_dump()

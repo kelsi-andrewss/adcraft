@@ -652,20 +652,6 @@ with tab_runner:
 
 # ---- Tab 7: Visual Gallery ------------------------------------------------
 
-# Visual evaluation dimensions stored in the evaluations table
-_VISUAL_DIMENSIONS = {"brand_consistency", "composition_quality", "text_image_synergy"}
-
-
-def _visual_avg(evals: list[dict]) -> float | None:
-    """Average score across visual evaluation dimensions only."""
-    visual_scores = [
-        e["score"]
-        for e in evals
-        if e.get("dimension") in _VISUAL_DIMENSIONS and e.get("score") is not None
-    ]
-    return sum(visual_scores) / len(visual_scores) if visual_scores else None
-
-
 with tab_gallery:
     st.header("Visual Gallery")
 
@@ -692,21 +678,18 @@ with tab_gallery:
             ad_evals_map[ad["id"]] = get_evaluations_for_ad(conn, ad["id"])
 
         # --- Filters ---
-        fcol1, fcol2, fcol3, fcol4 = st.columns(4)
+        fcol1, fcol2, fcol3 = st.columns(3)
         with fcol1:
-            min_visual = st.slider("Min Visual Score", 0.0, 10.0, 0.0, key="gallery_min_score")
+            min_score = st.slider("Min Text Score", 0.0, 10.0, 0.0, key="gallery_min_score")
         with fcol2:
-            # Dynamically populate image model options
             all_models = sorted(
                 {ad.get("image_model") for ad in image_ads if ad.get("image_model")}
             )
             selected_models = st.multiselect("Image Model", options=all_models, key="gallery_model")
         with fcol3:
-            min_brand = st.slider("Min Brand Consistency", 0.0, 10.0, 0.0, key="gallery_brand")
-        with fcol4:
             sort_option = st.selectbox(
                 "Sort by",
-                ["Visual Score", "Cost", "Newest"],
+                ["Text Score", "Cost", "Newest"],
                 key="gallery_sort",
             )
 
@@ -714,168 +697,58 @@ with tab_gallery:
         filtered_ads = []
         for ad in image_ads:
             evals = ad_evals_map.get(ad["id"], [])
-            v_avg = _visual_avg(evals)
+            score = _compute_weighted_score(evals)
 
-            # Min visual score filter
-            if min_visual > 0.0 and (v_avg is None or v_avg < min_visual):
+            if min_score > 0.0 and (score is None or score < min_score):
                 continue
-
-            # Image model filter
             if selected_models and ad.get("image_model") not in selected_models:
                 continue
-
-            # Brand consistency filter
-            if min_brand > 0.0:
-                bc_score = next(
-                    (
-                        e["score"]
-                        for e in evals
-                        if e.get("dimension") == "brand_consistency" and e.get("score") is not None
-                    ),
-                    None,
-                )
-                if bc_score is None or bc_score < min_brand:
-                    continue
 
             filtered_ads.append(ad)
 
         # --- Sort ---
         def _sort_key(ad: dict) -> float:
             evals = ad_evals_map.get(ad["id"], [])
-            if sort_option == "Visual Score":
-                return _visual_avg(evals) or 0.0
+            if sort_option == "Text Score":
+                return _compute_weighted_score(evals) or 0.0
             elif sort_option == "Cost":
                 return ad.get("image_cost_usd") or 0.0
-            else:  # Newest — already sorted by created_at DESC from query
-                return 0.0
+            return 0.0
 
-        if sort_option == "Visual Score":
+        if sort_option == "Text Score":
             filtered_ads.sort(key=_sort_key, reverse=True)
         elif sort_option == "Cost":
             filtered_ads.sort(key=_sort_key, reverse=False)
-        # "Newest" keeps the default query order (created_at DESC)
 
         st.caption(f"Showing {len(filtered_ads)} of {len(image_ads)} ads with images")
 
-        # =============================================================
-        # A/B Variant Comparison View
-        # =============================================================
-        variant_groups: dict[str, list[dict]] = {}
-        ungrouped: list[dict] = []
-        for ad in filtered_ads:
-            vg = ad.get("variant_group_id")
-            if vg:
-                variant_groups.setdefault(vg, []).append(ad)
-            else:
-                ungrouped.append(ad)
+        # --- 4-column thumbnail grid ---
+        for row_start in range(0, len(filtered_ads), 4):
+            row_ads = filtered_ads[row_start : row_start + 4]
+            grid_cols = st.columns(4)
+            for col, ad in zip(grid_cols, row_ads):
+                evals = ad_evals_map.get(ad["id"], [])
+                score = _compute_weighted_score(evals)
+                passed = score is not None and score >= PASSING_THRESHOLD
+                vtype = (ad.get("variant_type") or "").replace("_", " ").title()
 
-        if variant_groups:
-            st.subheader("A/B Variant Comparisons")
-            for vg_id, variants in variant_groups.items():
-                with st.container(border=True):
-                    st.markdown(f"**Variant Group** `{vg_id[:12]}...`")
-                    cols = st.columns(2)
+                with col:
+                    with st.container(border=True):
+                        img_path = ad.get("image_path", "")
+                        if img_path and Path(img_path).exists():
+                            st.image(img_path, use_container_width=True)
+                        else:
+                            st.caption("Image file not found")
 
-                    # Determine winner: highest avg visual score
-                    variant_scores = []
-                    for v in variants:
-                        v_evals = ad_evals_map.get(v["id"], [])
-                        variant_scores.append(_visual_avg(v_evals))
-                    best_idx = None
-                    best_score = -1.0
-                    for i, vs in enumerate(variant_scores):
-                        if vs is not None and vs > best_score:
-                            best_score = vs
-                            best_idx = i
+                        st.markdown(f"**{ad.get('headline', '')}**")
 
-                    for vi, (col, variant) in enumerate(zip(cols, variants)):
-                        v_evals = ad_evals_map.get(variant["id"], [])
-                        with col:
-                            # Winner badge
-                            if vi == best_idx and len(variants) > 1:
-                                st.markdown(":green[Winner]")
+                        if passed:
+                            status_str = f":green[Pass {score:.1f}]"
+                        else:
+                            status_str = f":red[Fail {score:.1f}]"
+                        meta = f"{status_str} | {vtype}" if vtype else status_str
+                        st.markdown(meta)
 
-                            # Variant type label
-                            vtype = variant.get("variant_type") or "variant"
-                            st.caption(vtype.replace("_", " ").title())
-
-                            # Image — fill the column (50% of page width)
-                            img_path = variant.get("image_path", "")
-                            if img_path and Path(img_path).exists():
-                                st.image(img_path, use_container_width=True)
-                            else:
-                                st.caption("Image file not found")
-
-                            # Headline
-                            st.markdown(f"**{variant.get('headline', '')}**")
-
-                            # Visual scores as metrics
-                            vs_cols = st.columns(3)
-                            for di, dim in enumerate(sorted(_VISUAL_DIMENSIONS)):
-                                dim_score = next(
-                                    (e["score"] for e in v_evals if e.get("dimension") == dim),
-                                    None,
-                                )
-                                vs_cols[di].metric(
-                                    dim.replace("_", " ").title(),
-                                    f"{dim_score:.1f}" if dim_score is not None else "N/A",
-                                )
-
-        # =============================================================
-        # Individual Ad Cards — 3-column grid
-        # =============================================================
-        cards_to_show = ungrouped if variant_groups else filtered_ads
-        if cards_to_show:
-            if variant_groups:
-                st.subheader("Individual Creatives")
-            for row_start in range(0, len(cards_to_show), 3):
-                row_ads = cards_to_show[row_start : row_start + 3]
-                grid_cols = st.columns(3)
-                for col, ad in zip(grid_cols, row_ads):
-                    evals = ad_evals_map.get(ad["id"], [])
-                    with col:
-                        with st.container(border=True):
-                            img_path = ad.get("image_path", "")
-                            if img_path and Path(img_path).exists():
-                                st.image(img_path, use_container_width=True)
-                            else:
-                                st.caption("Image file not found")
-
-                            st.markdown(f"**{ad.get('headline', '')}**")
-                            st.caption(
-                                f"{ad.get('image_model', 'N/A')} | "
-                                f"${ad.get('image_cost_usd', 0.0):.4f}"
-                            )
-
-                            # Visual evaluation scores
-                            visual_evals = [
-                                e for e in evals if e.get("dimension") in _VISUAL_DIMENSIONS
-                            ]
-                            if visual_evals:
-                                score_cols = st.columns(3)
-                                for di, dim in enumerate(sorted(_VISUAL_DIMENSIONS)):
-                                    dim_score = next(
-                                        (
-                                            e["score"]
-                                            for e in visual_evals
-                                            if e.get("dimension") == dim
-                                        ),
-                                        None,
-                                    )
-                                    score_cols[di].metric(
-                                        dim.replace("_", " ").title(),
-                                        f"{dim_score:.1f}" if dim_score is not None else "N/A",
-                                    )
-
-                            # Overall scores
-                            v_avg = _visual_avg(evals)
-                            composed = _compute_weighted_score(evals)
-                            score_line = ""
-                            if v_avg is not None:
-                                score_line += f"Visual: {v_avg:.1f}"
-                            if composed is not None:
-                                if score_line:
-                                    score_line += " | "
-                                score_line += f"Composed: {composed:.1f}"
-                            if score_line:
-                                st.caption(score_line)
+                        st.caption(
+                            f"{ad.get('image_model', 'N/A')} | ${ad.get('image_cost_usd', 0.0):.4f}"
+                        )

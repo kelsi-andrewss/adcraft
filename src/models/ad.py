@@ -13,3 +13,6 @@ class AdCopy(BaseModel):
     model_id: str = ""
     generation_config: dict = Field(default_factory=dict)
     token_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
