@@ -10,11 +10,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.decisions.logger import log_decision
-from src.evaluate.rubrics import DIMENSIONS, PASSING_THRESHOLD
+from src.evaluate.rubrics import (
+    BRAND_VOICE_HARD_GATE,
+    DIMENSION_WEIGHTS,
+    DIMENSIONS,
+    PASSING_THRESHOLD,
+    PEDAGOGICAL_INTEGRITY_HARD_GATE,
+)
 from src.models.ad import AdCopy
 from src.models.brief import AdBrief
 from src.models.evaluation import EvaluationResult
 from src.theme import THEME
+
+PASSING_TARGETS: dict[str, float] = {
+    "brand_voice": float(BRAND_VOICE_HARD_GATE),
+    "pedagogical_integrity": float(PEDAGOGICAL_INTEGRITY_HARD_GATE),
+}
+DEFAULT_PASSING_TARGET = 7.0
 
 
 @dataclass
@@ -34,8 +46,11 @@ INTERVENTION_STRATEGIES: dict[str, str] = {
         "experience that competitors can't deliver?"
     ),
     "cta_effectiveness": (
-        "Use a stronger action verb. Create urgency without being pushy. "
-        "Be specific about next step."
+        "The CTA button is platform-constrained (Learn More, Get Started, Sign Up, "
+        "Book Now, etc). To score 7+, the ad copy BEFORE the CTA must build toward "
+        "the action — establish what the reader gets (free diagnostic, custom plan, "
+        "tutor match) so the button feels like a natural next step, not a generic ask. "
+        "Frame the CTA as accessing something valuable, not just clicking a button."
     ),
     "brand_voice": (
         f"Match {THEME.brand_name}'s tone: confident, warm, expert but approachable. "
@@ -99,39 +114,40 @@ class SelfHealer:
         return is_regression
 
     def diagnose(self, evaluation: EvaluationResult) -> str:
-        """Identify the weakest dimension from evaluation scores.
+        """Identify the highest-impact dimension to fix.
 
-        Tie-breaking: prefer any hard-gated dimension (brand_voice or
-        pedagogical_integrity) over non-gated, then DIMENSIONS order.
+        Impact score = DIMENSION_WEIGHTS[dim] * max(0, passing_target - current_score).
+        Passing target is 7 for normal dimensions, 5 for brand_voice (hard gate),
+        6 for pedagogical_integrity (hard gate). Ties broken by DIMENSIONS order.
         """
         scores_by_dim = {s.dimension: s.score for s in evaluation.scores}
 
-        # Find the minimum score
-        min_score = min(scores_by_dim.values())
+        impact_scores: dict[str, float] = {}
+        for dim, score in scores_by_dim.items():
+            target = PASSING_TARGETS.get(dim, DEFAULT_PASSING_TARGET)
+            gap = max(0.0, target - score)
+            impact_scores[dim] = DIMENSION_WEIGHTS[dim] * gap
 
-        # Collect all dimensions at that minimum
-        tied = [d for d, s in scores_by_dim.items() if s == min_score]
+        max_impact = max(impact_scores.values())
 
-        if len(tied) == 1:
-            weakest = tied[0]
+        if max_impact > 0:
+            # Pick dimension with highest impact; break ties by DIMENSIONS order
+            weakest = next(d for d in DIMENSIONS if impact_scores.get(d, 0.0) == max_impact)
         else:
-            # Prefer hard-gated dimensions in ties
-            hard_gated = [d for d in tied if d in ("brand_voice", "pedagogical_integrity")]
-            if hard_gated:
-                weakest = hard_gated[0]
-            else:
-                # Fall back to DIMENSIONS order
-                weakest = next(d for d in DIMENSIONS if d in tied)
+            # All dimensions at or above target — fall back to lowest absolute score
+            weakest = min(scores_by_dim, key=scores_by_dim.get)
 
         log_decision(
             "healer",
             "diagnose_weakest",
-            f"Weakest dimension: {weakest} (score={scores_by_dim[weakest]:.1f})",
+            f"Highest-impact dimension: {weakest} "
+            f"(score={scores_by_dim[weakest]:.1f}, "
+            f"impact={impact_scores.get(weakest, 0.0):.3f})",
             {
                 "weakest": weakest,
                 "score": scores_by_dim[weakest],
+                "impact_scores": impact_scores,
                 "all_scores": scores_by_dim,
-                "tied_dimensions": tied,
             },
         )
 

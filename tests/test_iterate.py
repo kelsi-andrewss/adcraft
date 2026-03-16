@@ -152,15 +152,18 @@ class TestSelfHealer:
         assert healer.diagnose(evaluation) == "clarity"
 
     @patch("src.iterate.healing.log_decision")
-    def test_diagnose_tie_prefers_hard_gated(self, mock_log):
+    def test_diagnose_prioritizes_by_impact_score(self, mock_log):
         healer = SelfHealer()
-        # Both clarity and brand_voice at 4.0 — prefer brand_voice (hard-gated)
+        # clarity=4.0: weight=0.20, target=7, gap=3, impact=0.60
+        # brand_voice=4.0: weight=0.12, target=5 (hard gate), gap=1, impact=0.12
+        # clarity has higher impact so it wins
         evaluation = _make_eval("ad-1", clarity=4.0, brand_voice=4.0)
-        assert healer.diagnose(evaluation) == "brand_voice"
+        assert healer.diagnose(evaluation) == "clarity"
 
     @patch("src.iterate.healing.log_decision")
-    def test_diagnose_tie_prefers_pedagogical_integrity(self, mock_log):
-        """When pedagogical_integrity and student_empathy are tied, prefer pedagogical_integrity."""
+    def test_diagnose_high_weight_hard_gate_wins(self, mock_log):
+        """pedagogical_integrity (weight=0.20, target=6, gap=2 -> impact=0.40) beats
+        student_empathy (weight=0.12, target=7, gap=3 -> impact=0.36)."""
         healer = SelfHealer()
         evaluation = _make_eval(
             "ad-1",
@@ -307,10 +310,15 @@ class TestIterationController:
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
     def test_max_cycles_force_fail(self, mock_heal_log, mock_ctrl_log, db_conn):
-        """3 consecutive failures -> controller returns None."""
-        failing_eval = _make_eval("", clarity=3.0, passed=False)
-        # Coherence passes but still failing
-        still_failing_eval = _make_eval("", clarity=4.0, passed=False)
+        """Controller returns None after MAX_CYCLES when score keeps improving but never passes.
+
+        Each eval/coherence pair shows improvement (delta > 0) so diminishing_returns
+        never fires. Force-fail triggers at cycle 5 when FIX checks cycle >= MAX_CYCLES.
+        Needs 9 eval calls: 4 pairs of (eval, coherence) for cycles 1-4, plus eval at cycle 5.
+        """
+        # clarity values for each evaluate_iteration call, monotonically increasing
+        clarity_sequence = [4.0, 4.5, 5.0, 5.5, 5.8, 6.0, 6.2, 6.4, 6.6]
+        eval_results = [_make_eval("", clarity=c, passed=False) for c in clarity_sequence]
 
         ads = [
             AdCopy(
@@ -325,10 +333,6 @@ class TestIterationController:
             for i in range(10)
         ]
 
-        # Pattern: generate -> eval(fail) -> fix -> coherence(pass but still fail)
-        # -> eval(fail) -> ... until max cycles
-        eval_results = [failing_eval, still_failing_eval] * 5
-
         controller, mock_gen, mock_eval = _build_controller(
             db_conn,
             gen_side_effect=ads,
@@ -338,8 +342,11 @@ class TestIterationController:
         ad, records, evaluation = controller.iterate(SAMPLE_BRIEF)
 
         assert ad is None
-        assert len(records) > 0  # At least some iteration attempts
-        assert evaluation is not None  # Final eval is always returned even on fail
+        assert len(records) > 0
+        assert evaluation is not None
+
+        ctrl_actions = [call.args[1] for call in mock_ctrl_log.call_args_list]
+        assert "force_fail" in ctrl_actions
 
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
@@ -380,12 +387,12 @@ class TestIterationController:
     @patch("src.iterate.controller.log_decision")
     @patch("src.iterate.healing.log_decision")
     def test_diminishing_returns_early_exit(self, mock_heal_log, mock_ctrl_log, db_conn):
-        """Controller exits early when score improvement falls below CONVERGENCE_THRESHOLD.
+        """Controller exits early when score does not improve at all (delta <= 0).
 
-        The cycle > 1 guard (MED-4) means convergence only triggers from cycle 2 onward.
+        The cycle > 1 guard means convergence only triggers from cycle 2 onward.
         Flow: cycle 1 EVALUATE (fail, big delta -> no exit) -> FIX -> COHERENCE_CHECK
         (pass coherence, still failing, cycle==1 -> no exit, loop to EVALUATE at cycle 2)
-        -> cycle 2 EVALUATE (fail, tiny delta < threshold AND cycle > 1 -> FAIL).
+        -> cycle 2 EVALUATE (fail, same score as last -> delta=0 AND cycle > 1 -> FAIL).
         """
         # Cycle 1: eval fails with score ~5.0 (large delta from 0.0 -> no convergence exit)
         eval_cycle1 = _make_eval(
@@ -409,16 +416,16 @@ class TestIterationController:
             pedagogical_integrity=5.1,
             passed=False,
         )
-        # Cycle 2 EVALUATE: tiny improvement from last_score 5.1 -> ~5.15
-        # delta=0.05 < 0.3 threshold AND cycle==2 > 1 -> triggers diminishing_returns exit
+        # Cycle 2 EVALUATE: same score as last_score (5.1)
+        # delta=0.0 <= 0 AND cycle==2 > 1 -> triggers diminishing_returns exit
         eval_cycle2 = _make_eval(
             "",
-            clarity=5.15,
-            learner_benefit=5.15,
-            cta_effectiveness=5.15,
-            brand_voice=5.15,
-            student_empathy=5.15,
-            pedagogical_integrity=5.15,
+            clarity=5.1,
+            learner_benefit=5.1,
+            cta_effectiveness=5.1,
+            brand_voice=5.1,
+            student_empathy=5.1,
+            pedagogical_integrity=5.1,
             passed=False,
         )
 

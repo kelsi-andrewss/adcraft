@@ -206,11 +206,18 @@ class GenerationEngine:
 - Active Learning: Learning is a process, not a transaction. Ads should frame education as a journey of growth, not a product to purchase.
 - Never promise outcomes without effort. No "guaranteed scores" or "learn tricks." Frame improvement as the result of guided, personalized work."""
 
+        brief_translation_rules = f"""BRIEF TRANSLATION RULES — How to handle common brief tensions for {THEME.brand_name}:
+- When the brief mentions "guarantee", "money-back", or risk-reduction messaging: frame it as confidence built through track record and methodology. Say "average 160-point improvement" or "backed by 3,000+ success stories", NOT "guaranteed score increase." The guarantee is about the commitment to the process, not a promised outcome.
+- When the brief asks for urgency: use timeline-based urgency (admissions deadlines, registration windows) not anxiety-based urgency ("don't fall behind", "running out of time").
+- CTA must connect to a benefit. Not just "Learn More" but set up the CTA with context: "See how [specific thing] works for [audience]" leading to the button. The CTA button is constrained to platform options, but the surrounding copy should make clicking feel like the natural next step."""
+
         return f"""You are an expert advertising copywriter for {THEME.brand_name}, creating a Facebook/Instagram ad for SAT test prep.
 
 {BRAND_VOICE_GUIDELINES}
 
 {pedagogical_north_star}
+
+{brief_translation_rules}
 
 {PLATFORM_CONSTRAINTS}
 
