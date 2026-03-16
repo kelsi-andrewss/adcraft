@@ -64,6 +64,9 @@ def _build_weighted_avg_case() -> str:
             ELSE 0
         END
     """
+    assert all(
+        isinstance(k, str) and isinstance(v, (int, float)) for k, v in DIMENSION_WEIGHTS.items()
+    )
     branches = "\n            ".join(
         f"WHEN '{dim}' THEN {weight}" for dim, weight in DIMENSION_WEIGHTS.items()
     )

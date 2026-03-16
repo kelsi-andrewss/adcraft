@@ -267,6 +267,14 @@ Generate the ad copy now."""
                 {"model": self._model, "error": str(exc), "code": exc.code, "retriable": retriable},
             )
             raise
+        except Exception as exc:
+            log_decision(
+                "generator",
+                "api_error",
+                f"Non-API exception: {exc}",
+                {"model": self._model, "error": str(exc)},
+            )
+            raise
 
         token_count = 0
         if hasattr(response, "usage_metadata") and response.usage_metadata:
