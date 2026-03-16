@@ -149,8 +149,10 @@ with st.sidebar:
     iter_count_row = conn.execute("SELECT COUNT(*) as cnt FROM iterations").fetchone()
     total_iterations = iter_count_row["cnt"] if iter_count_row else 0
 
-    # Total cost
-    cost_row = conn.execute("SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM ads").fetchone()
+    # Total cost (generation + evaluation + image generation)
+    cost_row = conn.execute(
+        "SELECT COALESCE(SUM(cost_usd), 0.0) + COALESCE(SUM(image_cost_usd), 0.0) as total FROM ads"
+    ).fetchone()
     ad_cost = cost_row["total"] if cost_row else 0.0
     eval_cost_row = conn.execute(
         "SELECT COALESCE(SUM(cost_usd), 0.0) as total FROM evaluations"
@@ -164,7 +166,7 @@ with st.sidebar:
 
     col3, col4 = st.columns(2)
     col3.metric("Iterations", total_iterations)
-    col4.metric("Total Cost", f"${total_cost:.4f}")
+    col4.metric("Total Cost", f"${total_cost:.2f}")
 
     st.divider()
     if st.button("Refresh", use_container_width=True):
@@ -545,6 +547,10 @@ with tab_cost:
                 UNION ALL
                 SELECT evaluator_model as model_id, cost_usd, input_tokens, output_tokens
                 FROM evaluations WHERE evaluator_model IS NOT NULL
+                UNION ALL
+                SELECT image_model as model_id, image_cost_usd as cost_usd,
+                       NULL as input_tokens, NULL as output_tokens
+                FROM ads WHERE image_model IS NOT NULL
             )
             GROUP BY model_id
             ORDER BY total_cost DESC
